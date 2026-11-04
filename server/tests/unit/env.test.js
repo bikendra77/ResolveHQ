@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('dotenv/config', () => ({}));
+
 const originalNodeEnv = process.env.NODE_ENV;
 const originalMongoUri = process.env.MONGODB_URI;
 

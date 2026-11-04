@@ -16,6 +16,8 @@ vi.mock('mongoose', () => ({
   },
 }));
 
+vi.mock('dotenv/config', () => ({}));
+
 vi.mock('../../src/config/logger.js', () => ({
   logger: { info: mocks.info, error: mocks.error },
 }));
