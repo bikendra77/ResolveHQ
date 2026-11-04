@@ -11,6 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "format": "prettier --write --ignore-path ../.prettierignore .",
     "format:check": "prettier --check --ignore-path ../.prettierignore ."
   },
   "dependencies": {

@@ -15,6 +15,7 @@
     "start:server": "npm run start --workspace=resolvehq-server",
     "build": "npm run build --workspace=resolvehq-client",
     "lint": "npm run lint --workspaces",
+    "format": "npm run format --workspaces",
     "format:check": "npm run format:check --workspaces",
     "test": "npm test --workspace=resolvehq-server"
   }

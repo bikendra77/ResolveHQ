@@ -28,10 +28,12 @@ Copy-Item server/.env.example server/.env
 npm run dev:server
 ```
 
-The Express server listens on port `4000` by default. `GET http://localhost:4000/healthz` returns a basic health response. Environment values are validated at startup; `.env.example` contains placeholders/defaults only.
+The server connects to MongoDB before listening on port `4000`. The example URI targets a local MongoDB instance; install and start MongoDB locally, or replace `MONGODB_URI` in `server/.env` with your own Atlas connection string. Never commit the `.env` file or share its credentials. Environment values are validated at startup. `GET http://localhost:4000/healthz` returns a basic health response without database details.
+
+The test environment uses a local test-database URI by default and does not connect to MongoDB.
 
 ## Checks
 
-From the repository root, run `npm run lint`, `npm run format:check`, `npm run build`, or `npm test`.
+From the repository root, run `npm run lint`, `npm run format`, `npm run format:check`, `npm run build`, or `npm test`.
 
 See [docs/architecture.md](./docs/architecture.md) for the current foundation diagram. The supplied architecture blueprint remains the source of truth for planned phases.
