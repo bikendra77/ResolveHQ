@@ -13,7 +13,41 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=optional
+      - name: Diagnose Rollup optional dependency installation
+        run: |
+          echo "Node: $(node --version)"
+          echo "npm: $(npm --version)"
+          echo "npm omit: $(npm config get omit)"
+          echo "npm optional: $(npm config get optional)"
+          echo "npm include: $(npm config get include)"
+          echo "npm_config_omit: ${npm_config_omit-<unset>}"
+          echo "npm_config_optional: ${npm_config_optional-<unset>}"
+          if npm ls @rollup/rollup-linux-x64-gnu --all; then
+            echo "npm dependency tree: Linux Rollup package is installed"
+          else
+            echo "npm dependency tree: Linux Rollup package is missing"
+          fi
+          node <<'NODE'
+          const { existsSync } = require('node:fs');
+          const { resolve } = require('node:path');
+          const packageName = '@rollup/rollup-linux-x64-gnu';
+          const manifests = [
+            resolve('node_modules', packageName, 'package.json'),
+            resolve('client/node_modules', packageName, 'package.json'),
+          ];
+          const installedAt = manifests.find(existsSync);
+          console.log(`Package installed: ${installedAt ?? 'no'}`);
+          try {
+            console.log(
+              `Client resolution: ${require.resolve(packageName, {
+                paths: [resolve('client')],
+              })}`,
+            );
+          } catch (error) {
+            console.log(`Client resolution: NOT RESOLVABLE (${error.message})`);
+          }
+          NODE
       - run: npm run lint
       - run: npm run format:check
       - run: npm run build
