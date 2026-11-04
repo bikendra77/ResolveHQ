@@ -1,0 +1,21 @@
+{
+  "name": "resolvehq",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=resolvehq-client",
+    "dev:server": "npm run dev --workspace=resolvehq-server",
+    "start:server": "npm run start --workspace=resolvehq-server",
+    "build": "npm run build --workspace=resolvehq-client",
+    "lint": "npm run lint --workspaces",
+    "format:check": "npm run format:check --workspaces",
+    "test": "npm test --workspace=resolvehq-server"
+  }
+}
