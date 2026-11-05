@@ -1,6 +1,6 @@
 # ResolveHQ
 
-ResolveHQ is a project-management and issue-tracking application planned as a React/Vite client and an Express API. This repository contains the Phase 1 foundation only; authentication, persistence, product APIs, and user-facing features are not implemented.
+ResolveHQ is a project-management and issue-tracking application planned as a React/Vite client and an Express API. The backend foundation includes MongoDB connectivity and the initial authentication endpoints; organizations, project/task APIs, and frontend authentication are not implemented.
 
 ## Requirements
 
@@ -24,13 +24,34 @@ To customize its display name, copy `client/.env.example` to `client/.env`. Vite
 In a separate terminal, from the repository root:
 
 ```powershell
-Copy-Item server/.env.example server/.env
+if (-not (Test-Path server/.env)) { Copy-Item server/.env.example server/.env }
 npm run dev:server
 ```
 
 The server connects to MongoDB before listening on port `4000`. The example URI targets a local MongoDB instance; install and start MongoDB locally, or replace `MONGODB_URI` in `server/.env` with your own Atlas connection string. Never commit the `.env` file or share its credentials. Environment values are validated at startup. `GET http://localhost:4000/healthz` returns a basic health response without database details.
 
-The test environment uses a local test-database URI by default and does not connect to MongoDB.
+Set `JWT_ACCESS_SECRET` in `server/.env` to a random secret of at least 32 bytes, replacing the example placeholder. If `server/.env` already exists, preserve it and add the required variable instead of copying over it. Login and registration requests are rate-limited; production login limits apply per IP and normalized email. You can generate a secret value locally with:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
+```
+
+The example's JWT secret is only a placeholder and must be replaced. `CLIENT_ORIGIN` defaults to `http://localhost:5173` in development. Authentication endpoints are `POST /api/v1/auth/register`, `/login`, `/refresh`, `/logout`, `/logout-all`, and `GET /api/v1/auth/me`. Refresh tokens are stored hashed and sent in a secure, HttpOnly cookie; access tokens expire after 15 minutes.
+
+`npm test` runs the unit tests and mocked authentication HTTP tests without
+connecting to MongoDB. The real authentication persistence tests are opt-in and
+use a unique database on a local MongoDB server at `127.0.0.1:27017`; they drop
+that database after the run. To include them from the repository root in
+PowerShell:
+
+```powershell
+$env:RESOLVEHQ_MONGODB_INTEGRATION = '1'
+npm test
+```
+
+GitHub Actions provisions its own MongoDB service and enables these tests.
+Local runs require MongoDB listening on `127.0.0.1:27017`; no developer or
+production database URI is used by the integration suite.
 
 ## Checks
 
