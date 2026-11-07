@@ -10,6 +10,7 @@ const stores = vi.hoisted(() => {
   let organizationSlugDuplicateOnce = false;
   let transactionError = null;
   let lastMembershipFilter = null;
+  let lastMemberListFilter = null;
 
   function id() {
     return (nextId++).toString(16).padStart(24, '0');
@@ -106,6 +107,21 @@ const stores = vi.hoisted(() => {
     }
 
     static find(filter) {
+      if (Object.hasOwn(filter, 'organization')) {
+        lastMemberListFilter = filter;
+        return query(() =>
+          memberships
+            .filter(
+              (membership) =>
+                String(membership.organization) === String(filter.organization),
+            )
+            .map((membership) => ({
+              ...membership,
+              user: users.get(String(membership.user)) ?? null,
+            })),
+        );
+      }
+
       return query(() =>
         memberships
           .filter(
@@ -181,6 +197,7 @@ const stores = vi.hoisted(() => {
     organizationSlugDuplicateOnce = false;
     transactionError = null;
     lastMembershipFilter = null;
+    lastMemberListFilter = null;
   }
 
   function seedOrganization(fields) {
@@ -190,7 +207,11 @@ const stores = vi.hoisted(() => {
   }
 
   function seedMembership(fields) {
-    const membership = { _id: id(), ...fields };
+    const membership = {
+      _id: id(),
+      createdAt: new Date('2025-01-01T00:00:00.000Z'),
+      ...fields,
+    };
     memberships.push(membership);
     return membership;
   }
@@ -219,6 +240,9 @@ const stores = vi.hoisted(() => {
     },
     get lastMembershipFilter() {
       return lastMembershipFilter;
+    },
+    get lastMemberListFilter() {
+      return lastMemberListFilter;
     },
   };
 });
@@ -465,5 +489,108 @@ describe('organization API', () => {
 
     expect(invalidIdResponse.status).toBe(404);
     expect(nonMemberResponse.status).toBe(404);
+  });
+
+  it.each(['owner', 'admin', 'member', 'viewer'])(
+    'allows %s members to list members only from the resolved organization',
+    async (role) => {
+      const organization = stores.seedOrganization({
+        name: 'Ada Team',
+        slug: 'ada-team',
+        createdBy: userId,
+      });
+      stores.seedMembership({
+        organization: organization._id,
+        user: userId,
+        role,
+      });
+      stores.seedMembership({
+        organization: organization._id,
+        user: otherUserId,
+        role: 'member',
+      });
+      const otherOrganization = stores.seedOrganization({
+        name: 'Grace Team',
+        slug: 'grace-team',
+        createdBy: otherUserId,
+      });
+      stores.seedMembership({
+        organization: otherOrganization._id,
+        user: otherUserId,
+        role: 'owner',
+      });
+
+      const response = await request(app)
+        .get(`/api/v1/organizations/${organization._id}/members`)
+        .set(authenticatedAs());
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.members).toHaveLength(2);
+      expect(response.body.data.members).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: userId,
+            name: 'Ada Lovelace',
+            email: 'ada@example.com',
+            role,
+            joinedAt: '2025-01-01T00:00:00.000Z',
+          }),
+          expect.objectContaining({
+            id: otherUserId,
+            name: 'Grace Hopper',
+            email: 'grace@example.com',
+            role: 'member',
+          }),
+        ]),
+      );
+      expect(stores.lastMembershipFilter).toEqual({
+        organization: String(organization._id),
+        user: userId,
+      });
+      expect(stores.lastMemberListFilter).toEqual({
+        organization: organization._id,
+      });
+    },
+  );
+
+  it('requires authentication to list organization members', async () => {
+    const organization = stores.seedOrganization({
+      name: 'Ada Team',
+      slug: 'ada-team',
+      createdBy: userId,
+    });
+
+    const response = await request(app).get(
+      `/api/v1/organizations/${organization._id}/members`,
+    );
+
+    expect(response.status).toBe(401);
+    expect(stores.lastMembershipFilter).toBeNull();
+    expect(stores.lastMemberListFilter).toBeNull();
+  });
+
+  it('returns 404 when a user requests members of an organization they do not belong to', async () => {
+    const organization = stores.seedOrganization({
+      name: 'Grace Team',
+      slug: 'grace-team',
+      createdBy: otherUserId,
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: otherUserId,
+      role: 'owner',
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/organizations/${organization._id}/members`)
+      .set(authenticatedAs());
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe('NOT_FOUND');
+    expect(stores.lastMembershipFilter).toEqual({
+      organization: String(organization._id),
+      user: userId,
+    });
+    expect(stores.lastMemberListFilter).toBeNull();
   });
 });

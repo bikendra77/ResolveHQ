@@ -5,6 +5,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
   owner: Object.freeze(['*']),
   admin: Object.freeze([
     'org:update',
+    'member:read',
     'member:invite',
     'member:role',
     'member:remove',
@@ -23,6 +24,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     'analytics:read',
   ]),
   member: Object.freeze([
+    'member:read',
     'project:read',
     'task:create',
     'task:update',
@@ -40,13 +42,19 @@ export const ROLE_PERMISSIONS = Object.freeze({
     'activity:project',
     'analytics:read',
   ]),
-  viewer: Object.freeze(['project:read', 'activity:project', 'analytics:read']),
+  viewer: Object.freeze([
+    'member:read',
+    'project:read',
+    'activity:project',
+    'analytics:read',
+  ]),
 });
 
 // Keep checks fail-closed even for the owner's global grant. Add new concrete
 // permissions here when introducing them to the authorization model.
 const KNOWN_PERMISSIONS = new Set([
   'org:update',
+  'member:read',
   'member:invite',
   'member:role',
   'member:remove',

@@ -112,11 +112,12 @@ All organization endpoints require an authenticated access token. Organization
 creation derives its creator from the authenticated user; request bodies cannot
 set the creator, organization identifier, or membership role.
 
-| Method and path                         | Request                          | Success                           |
-| --------------------------------------- | -------------------------------- | --------------------------------- |
-| `GET /api/v1/organizations`             | No body                          | `200` caller's organizations      |
-| `POST /api/v1/organizations`            | JSON: `name`                     | `201` organization; caller is Owner |
-| `GET /api/v1/organizations/:organizationId` | MongoDB organization ID in path | `200` organization and caller role |
+| Method and path                                     | Request                         | Success                              |
+| --------------------------------------------------- | ------------------------------- | ------------------------------------ |
+| `GET /api/v1/organizations`                         | No body                         | `200` caller's organizations         |
+| `POST /api/v1/organizations`                        | JSON: `name`                    | `201` organization; caller is Owner  |
+| `GET /api/v1/organizations/:organizationId`         | MongoDB organization ID in path | `200` organization and caller role   |
+| `GET /api/v1/organizations/:organizationId/members` | Organization ID in path         | `200` organization members and roles |
 
 `POST /api/v1/organizations` accepts a trimmed, non-empty name of at most 80
 characters and rejects unknown fields. Slugs are generated from the name in
@@ -152,6 +153,27 @@ Successful organization responses use this shape:
 The list response contains an `organizations` array with the same item shape.
 Memberships support multiple organizations; this API does not impose a
 one-organization-per-user restriction.
+
+The members endpoint requires membership in the requested organization; users
+outside that tenant receive `404 NOT_FOUND`. All four organization roles may
+list its members. The response includes each member's user ID, name, email,
+role, and membership creation time as `joinedAt`.
+
+```json
+{
+  "data": {
+    "members": [
+      {
+        "id": "MongoDB user ID",
+        "name": "Alex Example",
+        "email": "alex@example.com",
+        "role": "member",
+        "joinedAt": "ISO date"
+      }
+    ]
+  }
+}
+```
 
 ## Errors and limits
 

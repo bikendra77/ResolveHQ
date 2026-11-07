@@ -84,6 +84,11 @@ querying Membership with both the caller's user ID and the requested
 organization ID; inaccessible or invalid IDs return 404. The URL identifier is
 never treated as authorization by itself. Authentication, membership-based
 tenant resolution, and role permissions remain separate concerns.
+`loadContext` performs this membership-scoped lookup and attaches the user,
+organization, membership, and role to `req.ctx`. `authorize(permission)` then
+uses the centralized `can()` permission checker. The members-list endpoint
+requires `member:read`, granted to all four organization roles, and queries
+memberships only for the resolved organization.
 
 `POST /api/v1/organizations` validates a strict `{ "name": "..." }` body,
 derives the creator from `req.user`, and creates the Organization and Owner
@@ -106,7 +111,7 @@ server/src/
   app.js                  Express app and HTTP middleware
   server.js               Database startup, listen, graceful shutdown
   config/                 Environment, database, structured logger
-  middleware/             Authentication, tenant resolution, validation, errors
+  middleware/             Authentication, tenant context, authorization, validation, errors
   modules/auth/            Auth routes, controllers, schemas, service, models
   modules/organizations/   Organization routes, controllers, service, models
   utils/                  API errors, RBAC permissions, transaction utility
@@ -116,8 +121,8 @@ MongoDB models comprise `User`, `RefreshToken`, `Organization`, `Membership`,
 and `Invitation`. Organization and membership schemas establish tenant and
 organization-role references; invitations store only a SHA-256 token hash,
 with optional project assignments and expiry metadata. Tenant service workflows
-are limited to organization listing, creation, and membership-scoped detail;
-invitation workflows are not implemented.
+include organization listing, creation, membership-scoped detail, and
+organization member listing; invitation workflows are not implemented.
 
 ## Operational configuration
 

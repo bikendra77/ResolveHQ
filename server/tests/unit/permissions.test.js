@@ -5,6 +5,7 @@ const blueprintRolePermissions = {
   owner: ['*'],
   admin: [
     'org:update',
+    'member:read',
     'member:invite',
     'member:role',
     'member:remove',
@@ -23,6 +24,7 @@ const blueprintRolePermissions = {
     'analytics:read',
   ],
   member: [
+    'member:read',
     'project:read',
     'task:create',
     'task:update',
@@ -40,7 +42,7 @@ const blueprintRolePermissions = {
     'activity:project',
     'analytics:read',
   ],
-  viewer: ['project:read', 'activity:project', 'analytics:read'],
+  viewer: ['member:read', 'project:read', 'activity:project', 'analytics:read'],
 };
 
 const rolePermissionCases = [
@@ -59,6 +61,7 @@ const rolePermissionCases = [
     role: 'admin',
     allowed: [
       'org:update',
+      'member:read',
       'member:role',
       'project:archive',
       'projectMember:manage',
@@ -72,6 +75,7 @@ const rolePermissionCases = [
   {
     role: 'member',
     allowed: [
+      'member:read',
       'project:read',
       'task:create',
       'task:update',
@@ -98,7 +102,12 @@ const rolePermissionCases = [
   },
   {
     role: 'viewer',
-    allowed: ['project:read', 'activity:project', 'analytics:read'],
+    allowed: [
+      'member:read',
+      'project:read',
+      'activity:project',
+      'analytics:read',
+    ],
     denied: [
       'org:update',
       'project:create',

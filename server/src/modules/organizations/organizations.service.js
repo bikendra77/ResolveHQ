@@ -49,6 +49,12 @@ export async function listOrganizationsForUser(userId) {
     }));
 }
 
+export async function listOrganizationMembers(organizationId) {
+  return Membership.find({ organization: organizationId })
+    .populate('user', 'name email')
+    .sort({ createdAt: 1 });
+}
+
 export async function createOrganizationForUser(userId, name) {
   const baseSlug = slugify(name);
 

@@ -1,5 +1,6 @@
 import {
   createOrganizationForUser,
+  listOrganizationMembers,
   listOrganizationsForUser,
 } from './organizations.service.js';
 
@@ -42,6 +43,24 @@ export function getOrganizationController(req, res) {
   return res.status(200).json({
     data: {
       organization: publicOrganization(req.organization, req.membership.role),
+    },
+  });
+}
+
+export async function listOrganizationMembersController(req, res) {
+  const memberships = await listOrganizationMembers(req.ctx.organization._id);
+
+  return res.status(200).json({
+    data: {
+      members: memberships
+        .filter((membership) => membership.user)
+        .map(({ user, role, createdAt }) => ({
+          id: String(user._id),
+          name: user.name,
+          email: user.email,
+          role,
+          joinedAt: createdAt,
+        })),
     },
   });
 }
