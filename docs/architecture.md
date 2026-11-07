@@ -1,31 +1,39 @@
 # Architecture (implemented state)
 
+The canonical project root is the directory containing `package.json`, `.git`,
+`client/`, `server/`, and `docs/`. npm workspace commands should be run from
+this directory.
+
 ResolveHQ currently consists of a React/Vite single-page client and an Express
-API. The API is organized as a modular monolith; authentication is the only
-domain module with routes and persistence models. Product-management modules
-shown in the original blueprint are future work.
+API. The API is organized as a modular monolith with authentication and
+organization endpoints. Organization creation and membership-scoped tenant
+resolution establish the first tenant workflow; invitations and the
+product-management modules shown in the original blueprint remain future work.
 
 ## Components and request flow
 
 ```mermaid
 flowchart LR
   Browser["Browser\nReact 19 client"]
-  Vite["Vite dev server\n/api proxy"]
+  Vite["Vite dev server\n/api and /healthz proxies"]
   API["Express 5 app\nrequest IDs, JSON, cookies"]
   Auth["Authentication module\nroutes / controllers / service"]
-  Mongo[("MongoDB\nUser and RefreshToken")]
+  Org["Organization module\nroutes / controllers / service"]
+  Mongo[("MongoDB\nUser, RefreshToken, tenant models")]
   Config["Validated environment\nPino logger"]
 
-  Browser -->|"same-origin /api/v1 requests\ncredentials: include"| Vite
+  Browser -->|"same-origin /api/v1 and /healthz requests"| Vite
   Vite -->|"development proxy"| API
   API --> Auth
+  API --> Org
   Auth --> Mongo
+  Org --> Mongo
   Config --> API
   Config -->|"startup waits for connection"| Mongo
-  Browser -->|"GET /healthz"| API
 ```
 
-In development, Vite forwards `/api` to `http://localhost:4000`. The API app
+In development, Vite forwards `/api` and `/healthz` to
+`http://localhost:4000`. The API app
 module is separate from startup: `server/src/app.js` configures HTTP middleware
 and routes without opening a database connection. `server/src/server.js`
 validates configuration, connects to MongoDB before listening, and handles
@@ -65,28 +73,51 @@ user's token version, invalidating existing access and refresh tokens. Login
 and registration limits, as well as refresh limits, use in-memory rate-limit
 stores and are not distributed across processes.
 
+After authentication, the client loads the caller's organizations. An
+authenticated user with no memberships is routed to `/onboarding`; successful
+organization creation gives the caller an Owner membership and proceeds to
+`/app`. Existing users with memberships continue directly to `/app`.
+
+`GET /api/v1/organizations` lists only the authenticated user's memberships.
+`GET /api/v1/organizations/:organizationId` resolves the requested tenant by
+querying Membership with both the caller's user ID and the requested
+organization ID; inaccessible or invalid IDs return 404. The URL identifier is
+never treated as authorization by itself. Authentication, membership-based
+tenant resolution, and role permissions remain separate concerns.
+
+`POST /api/v1/organizations` validates a strict `{ "name": "..." }` body,
+derives the creator from `req.user`, and creates the Organization and Owner
+Membership in one transaction. Slugs are normalized to URL-safe lowercase and
+unique-index collisions are retried with random suffixes. The API returns
+`503 TRANSACTIONS_UNAVAILABLE` when MongoDB is standalone or disconnected; it
+does not fall back to nontransactional writes. The local standalone MongoDB
+instance therefore cannot complete this workflow.
+
 ## Current module boundaries
 
 ```text
 client/src/
   App.jsx                 Auth and initial /app routing
   auth/                   In-memory token, API client, auth context
-  components/             Login, registration, initial workspace shell
+  components/             Login, registration, onboarding, workspace shell
   routing.js              Lightweight client-side navigation
 
 server/src/
   app.js                  Express app and HTTP middleware
   server.js               Database startup, listen, graceful shutdown
   config/                 Environment, database, structured logger
-  middleware/             Authentication, validation, errors, 404
+  middleware/             Authentication, tenant resolution, validation, errors
   modules/auth/            Auth routes, controllers, schemas, service, models
-  utils/                  API error type
+  modules/organizations/   Organization routes, controllers, service, models
+  utils/                  API errors, RBAC permissions, transaction utility
 ```
 
-MongoDB models currently comprise `User` and `RefreshToken`. User records
-contain a normalized unique email, bcrypt password hash, token version, status,
-and timestamps. Refresh-token records contain the user, unique token hash,
-family, token version, expiry (TTL index), and revocation time.
+MongoDB models comprise `User`, `RefreshToken`, `Organization`, `Membership`,
+and `Invitation`. Organization and membership schemas establish tenant and
+organization-role references; invitations store only a SHA-256 token hash,
+with optional project assignments and expiry metadata. Tenant service workflows
+are limited to organization listing, creation, and membership-scoped detail;
+invitation workflows are not implemented.
 
 ## Operational configuration
 
@@ -101,16 +132,49 @@ The client reads `VITE_APP_NAME` and `VITE_API_BASE_URL` (default `/api/v1`).
 These values are public. Production hosting and same-origin reverse-proxy
 configuration are not provided by this repository.
 
+Run `npm run dev` from the canonical root to start the client and API together.
+The combined command runs the API without watch mode so startup failures stop
+both processes. It selects an available client port starting at `5173` and
+sets the corresponding API origin for that run. For API watch mode, use
+`npm run dev:client` and `npm run dev:server` in separate terminals, and set
+`CLIENT_ORIGIN` to the Vite origin. The API defaults to port `4000` and must
+connect to MongoDB before it listens.
+Server configuration errors name invalid variables without exposing their
+values; MongoDB connection errors advise checking service availability and
+`MONGODB_URI`.
+
+## Transaction infrastructure
+
+`server/src/utils/transaction.js` checks the connected server's `hello` response
+before starting a transaction. A replica-set response must include `setName`;
+a sharded deployment must report `msg: "isdbgrid"`. Standalone servers are
+rejected without a non-transactional fallback. The utility uses Mongoose
+`withTransaction()` and ends the session in `finally`; callers must pass the
+provided session explicitly to every participating query and write. Mongoose
+may retry the callback for transient transaction errors, so callbacks should
+contain database work only and defer external side effects until after commit.
+
+`server/src/config/db.js` does not force or verify a topology at connection
+startup. The runtime `hello` check verifies topology shape, not successful
+commit behavior. Transaction tests mock sessions; actual transaction support
+has not been verified against a replica set or sharded cluster. A local
+standalone MongoDB instance is not sufficient.
+
 ## Scope and verification
 
-**Implemented:** client login/registration, protected initial shell, session
-restoration; auth API; MongoDB user and refresh-token persistence; validation,
-logging, health endpoint, rate limits, and database lifecycle.
+**Implemented:** client login/registration, authenticated organization
+onboarding, protected workspace shell, organization listing/creation/detail
+API, membership-scoped tenant resolution, MongoDB user/session/tenant
+persistence, reusable transaction utility, validation, logging, health
+endpoint, rate limits, and database lifecycle.
 
 **Tested:** mocked client auth/API behavior, backend HTTP behavior with mocked
-persistence, server and configuration units, and an opt-in real-MongoDB auth
-suite. See [the README](../README.md) for commands.
+persistence, schema and mocked transaction units, server and configuration
+units, and an opt-in real-MongoDB auth suite. Transaction tests do not prove
+database transaction compatibility. See [the README](../README.md) for
+commands.
 
-**Not implemented or not verified:** organization/team/project/task/issue
-features; live browser-to-API end-to-end behavior; production deployment,
-distributed rate limiting, and the complete production security checklist.
+**Not implemented or not verified:** invitation workflows; team/project/task/
+issue features; live browser-to-API end-to-end behavior; replica-set/sharded
+transaction execution; production deployment, distributed rate limiting, and
+the complete production security checklist.

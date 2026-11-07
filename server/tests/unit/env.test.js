@@ -49,7 +49,9 @@ describe('environment validation', () => {
   });
 
   it('requires a MongoDB URI outside test mode', async () => {
-    await expect(loadEnvironment('development')).rejects.toThrow();
+    await expect(loadEnvironment('development')).rejects.toThrow(
+      /MONGODB_URI.*JWT_ACCESS_SECRET/,
+    );
   });
 
   it('requires a non-placeholder access secret outside test mode', async () => {
@@ -58,7 +60,7 @@ describe('environment validation', () => {
         MONGODB_URI: 'mongodb://127.0.0.1:27017/resolvehq',
         JWT_ACCESS_SECRET: 'replace-with-at-least-32-random-bytes',
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/JWT_ACCESS_SECRET/);
   });
 
   it('requires a client origin in production', async () => {
@@ -67,7 +69,7 @@ describe('environment validation', () => {
         MONGODB_URI: 'mongodb://127.0.0.1:27017/resolvehq',
         JWT_ACCESS_SECRET: 'a'.repeat(32),
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/CLIENT_ORIGIN/);
   });
 
   it('rejects non-MongoDB URI protocols', async () => {

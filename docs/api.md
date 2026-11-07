@@ -1,12 +1,14 @@
 # HTTP API (implemented state)
 
 The API is served by the Express application. Its current routes are
-`GET /healthz` and the authentication endpoints listed below. No organization,
-project, task, issue, or collaboration endpoints are implemented.
+`GET /healthz`, authentication endpoints, and the organization endpoints listed
+below. Project, task, issue, and collaboration endpoints are not implemented.
 
-The local Vite server proxies `/api` to `http://localhost:4000`; the API
-base path used by the client defaults to `/api/v1`. Unless noted otherwise,
-JSON responses use the shapes below. Authenticated endpoints require an
+The local Vite server proxies `/api` and `/healthz` to
+`http://localhost:4000`; the API base path used by the client defaults to
+`/api/v1`. From the Vite origin, `GET /healthz` can therefore be used to check
+that the API process is reachable (it does not check MongoDB readiness).
+Unless noted otherwise, JSON responses use the shapes below. Authenticated endpoints require an
 `Authorization: Bearer <access-token>` header. Cookie-based requests require
 `credentials: include`.
 
@@ -103,6 +105,53 @@ clears the cookie, and invalidates existing access JWTs.
 
 The endpoint verifies the JWT and checks the user's active status and token
 version. Missing, invalid, or expired access tokens return `401`.
+
+## Organizations
+
+All organization endpoints require an authenticated access token. Organization
+creation derives its creator from the authenticated user; request bodies cannot
+set the creator, organization identifier, or membership role.
+
+| Method and path                         | Request                          | Success                           |
+| --------------------------------------- | -------------------------------- | --------------------------------- |
+| `GET /api/v1/organizations`             | No body                          | `200` caller's organizations      |
+| `POST /api/v1/organizations`            | JSON: `name`                     | `201` organization; caller is Owner |
+| `GET /api/v1/organizations/:organizationId` | MongoDB organization ID in path | `200` organization and caller role |
+
+`POST /api/v1/organizations` accepts a trimmed, non-empty name of at most 80
+characters and rejects unknown fields. Slugs are generated from the name in
+lowercase URL-safe form; collisions receive a random suffix and are protected
+by the database's unique slug index. The endpoint creates the Organization and
+Owner Membership inside one MongoDB transaction. It returns
+`503 TRANSACTIONS_UNAVAILABLE` if the server is disconnected or does not
+support transactions; there is no nontransactional fallback.
+
+The list endpoint returns only organizations found through the authenticated
+user's Membership records. The detail endpoint first checks Membership using
+both the authenticated user ID and the path organization ID. Invalid IDs and
+organizations without a matching membership return `404 NOT_FOUND`, avoiding
+disclosure of inaccessible tenant records.
+
+Successful organization responses use this shape:
+
+```json
+{
+  "data": {
+    "organization": {
+      "id": "MongoDB object id",
+      "name": "Acme Team",
+      "slug": "acme-team",
+      "role": "owner",
+      "createdAt": "ISO date",
+      "updatedAt": "ISO date"
+    }
+  }
+}
+```
+
+The list response contains an `organizations` array with the same item shape.
+Memberships support multiple organizations; this API does not impose a
+one-organization-per-user restriction.
 
 ## Errors and limits
 

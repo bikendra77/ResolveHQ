@@ -51,4 +51,24 @@ const envSchema = z.object({
       : clientOriginSchema.default('http://localhost:5173'),
 });
 
-export const env = envSchema.parse(process.env);
+const parsedEnvironment = envSchema.safeParse(process.env);
+
+if (!parsedEnvironment.success) {
+  const invalidVariables = [
+    ...new Set(
+      parsedEnvironment.error.issues
+        .map((issue) => issue.path[0])
+        .filter((variable) => typeof variable === 'string'),
+    ),
+  ];
+  const variables =
+    invalidVariables.length > 0
+      ? invalidVariables.join(', ')
+      : 'server environment variables';
+
+  throw new Error(
+    `Invalid server environment configuration. Check ${variables} in server/.env against server/.env.example. Values are not included in this error.`,
+  );
+}
+
+export const env = parsedEnvironment.data;
