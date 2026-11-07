@@ -180,6 +180,17 @@ outside that tenant receive `404 NOT_FOUND`. All four organization roles may
 list its members. The response includes each member's user ID, name, email,
 role, and membership creation time as `joinedAt`.
 
+Changing a member's role uses `PATCH
+/api/v1/organizations/{organizationId}/members/{userId}` with `{"role":
+"admin|member|viewer|owner"}`; removing a member uses `DELETE` on the same
+path. Both operations return `204 NO CONTENT` on success and scope the target
+membership to the organization in the URL. Owners may manage roles and
+memberships. Admins may change non-Admin members' roles but cannot assign the
+Owner or Admin role; they may remove any non-Owner member. Members and
+Viewers cannot use either operation. Demoting or removing the final Owner
+returns `409 LAST_OWNER`; an Owner may leave if another Owner remains. These
+membership changes run transactionally.
+
 ```json
 {
   "data": {

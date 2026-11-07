@@ -1,7 +1,9 @@
 import {
+  changeOrganizationMemberRole,
   createOrganizationForUser,
   listOrganizationMembers,
   listOrganizationsForUser,
+  removeOrganizationMember,
 } from './organizations.service.js';
 
 function publicOrganization(organization, role) {
@@ -63,4 +65,23 @@ export async function listOrganizationMembersController(req, res) {
         })),
     },
   });
+}
+
+export async function changeMemberRoleController(req, res) {
+  await changeOrganizationMemberRole(
+    req.ctx.organization._id,
+    req.params.userId,
+    req.body.role,
+    req.ctx.role,
+  );
+  return res.status(204).end();
+}
+
+export async function removeMemberController(req, res) {
+  await removeOrganizationMember(
+    req.ctx.organization._id,
+    req.params.userId,
+    req.ctx.role,
+  );
+  return res.status(204).end();
 }

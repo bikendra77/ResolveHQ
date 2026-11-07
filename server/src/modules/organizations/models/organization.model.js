@@ -22,6 +22,11 @@ const organizationSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    membershipVersion: {
+      type: Number,
+      default: 0,
+      required: true,
+    },
   },
   { timestamps: true },
 );

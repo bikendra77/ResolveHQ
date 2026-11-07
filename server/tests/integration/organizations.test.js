@@ -86,6 +86,19 @@ const stores = vi.hoisted(() => {
     static findById(organizationId) {
       return query(() => organizations.get(String(organizationId)) ?? null);
     }
+
+    static async updateOne(filter, update, { session: activeSession }) {
+      if (activeSession !== session) {
+        throw new Error(
+          'Organization write did not receive the transaction session',
+        );
+      }
+      const organization = organizations.get(String(filter._id));
+      if (!organization) return { matchedCount: 0 };
+      organization.membershipVersion =
+        (organization.membershipVersion ?? 0) + update.$inc.membershipVersion;
+      return { matchedCount: 1 };
+    }
   }
 
   class FakeMembership {
@@ -139,12 +152,62 @@ const stores = vi.hoisted(() => {
       lastMembershipFilter = filter;
       return query(
         () =>
-          memberships.find(
-            (membership) =>
-              String(membership.user) === String(filter.user) &&
-              String(membership.organization) === String(filter.organization),
+          memberships.find((membership) =>
+            Object.entries(filter).every(([key, value]) => {
+              if (key === '_id' || key === 'user' || key === 'organization') {
+                return String(membership[key]) === String(value);
+              }
+              return membership[key] === value;
+            }),
           ) ?? null,
       );
+    }
+
+    static countDocuments(filter) {
+      return query(
+        () =>
+          memberships.filter((membership) =>
+            Object.entries(filter).every(([key, value]) =>
+              key === 'organization'
+                ? String(membership[key]) === String(value)
+                : membership[key] === value,
+            ),
+          ).length,
+      );
+    }
+
+    static findOneAndUpdate(filter, update, { session: activeSession }) {
+      if (activeSession !== session) {
+        throw new Error(
+          'Membership write did not receive the transaction session',
+        );
+      }
+      return query(() => {
+        const membership =
+          memberships.find((item) =>
+            Object.entries(filter).every(([key, value]) =>
+              ['_id', 'organization', 'user'].includes(key)
+                ? String(item[key]) === String(value)
+                : item[key] === value,
+            ),
+          ) ?? null;
+        if (membership) Object.assign(membership, update.$set);
+        return membership;
+      });
+    }
+
+    static findOneAndDelete(filter) {
+      return query(() => {
+        const index = memberships.findIndex((item) =>
+          Object.entries(filter).every(([key, value]) =>
+            ['_id', 'organization', 'user'].includes(key)
+              ? String(item[key]) === String(value)
+              : item[key] === value,
+          ),
+        );
+        if (index < 0) return null;
+        return memberships.splice(index, 1)[0];
+      });
     }
   }
 
@@ -160,8 +223,12 @@ const stores = vi.hoisted(() => {
       throw transactionError;
     }
 
-    const organizationSnapshot = new Map(organizations);
-    const membershipSnapshot = [...memberships];
+    const organizationSnapshot = new Map(
+      [...organizations].map(([key, value]) => [key, { ...value }]),
+    );
+    const membershipSnapshot = memberships.map((membership) => ({
+      ...membership,
+    }));
     try {
       return await callback(session);
     } catch (error) {
@@ -201,7 +268,7 @@ const stores = vi.hoisted(() => {
   }
 
   function seedOrganization(fields) {
-    const organization = { _id: id(), ...fields };
+    const organization = { _id: id(), membershipVersion: 0, ...fields };
     organizations.set(String(organization._id), organization);
     return organization;
   }
@@ -592,5 +659,251 @@ describe('organization API', () => {
       user: userId,
     });
     expect(stores.lastMemberListFilter).toBeNull();
+  });
+
+  it('allows Owners and Admins to change roles within their limits', async () => {
+    const organization = stores.seedOrganization({
+      name: 'Ada Team',
+      slug: 'ada-team',
+      createdBy: userId,
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: userId,
+      role: 'owner',
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: otherUserId,
+      role: 'member',
+    });
+
+    const ownerResponse = await request(app)
+      .patch(`/api/v1/organizations/${organization._id}/members/${otherUserId}`)
+      .set(authenticatedAs())
+      .send({ role: 'admin' });
+
+    expect(ownerResponse.status).toBe(204);
+    expect(
+      stores.memberships.find((membership) => membership.user === otherUserId)
+        .role,
+    ).toBe('admin');
+
+    stores.memberships.find((membership) => membership.user === userId).role =
+      'admin';
+    stores.memberships.find(
+      (membership) => membership.user === otherUserId,
+    ).role = 'member';
+    const adminResponse = await request(app)
+      .patch(`/api/v1/organizations/${organization._id}/members/${otherUserId}`)
+      .set(authenticatedAs())
+      .send({ role: 'viewer' });
+
+    expect(adminResponse.status).toBe(204);
+    expect(
+      stores.memberships.find((membership) => membership.user === otherUserId)
+        .role,
+    ).toBe('viewer');
+  });
+
+  it('denies role escalation and Admins changing another Admin role', async () => {
+    const organization = stores.seedOrganization({
+      name: 'Ada Team',
+      slug: 'ada-team',
+      createdBy: userId,
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: userId,
+      role: 'admin',
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: otherUserId,
+      role: 'member',
+    });
+
+    const escalationResponse = await request(app)
+      .patch(`/api/v1/organizations/${organization._id}/members/${otherUserId}`)
+      .set(authenticatedAs())
+      .send({ role: 'admin' });
+    expect(escalationResponse.status).toBe(403);
+    expect(
+      stores.memberships.find((membership) => membership.user === otherUserId)
+        .role,
+    ).toBe('member');
+
+    stores.memberships.find(
+      (membership) => membership.user === otherUserId,
+    ).role = 'admin';
+    const peerAdminResponse = await request(app)
+      .patch(`/api/v1/organizations/${organization._id}/members/${otherUserId}`)
+      .set(authenticatedAs())
+      .send({ role: 'viewer' });
+    expect(peerAdminResponse.status).toBe(403);
+    expect(
+      stores.memberships.find((membership) => membership.user === otherUserId)
+        .role,
+    ).toBe('admin');
+  });
+
+  it.each(['member', 'viewer'])(
+    'denies %s members from changing roles or removing members',
+    async (role) => {
+      const organization = stores.seedOrganization({
+        name: 'Ada Team',
+        slug: 'ada-team',
+        createdBy: userId,
+      });
+      stores.seedMembership({
+        organization: organization._id,
+        user: userId,
+        role,
+      });
+      stores.seedMembership({
+        organization: organization._id,
+        user: otherUserId,
+        role: 'member',
+      });
+
+      const roleResponse = await request(app)
+        .patch(
+          `/api/v1/organizations/${organization._id}/members/${otherUserId}`,
+        )
+        .set(authenticatedAs())
+        .send({ role: 'viewer' });
+      const removeResponse = await request(app)
+        .delete(
+          `/api/v1/organizations/${organization._id}/members/${otherUserId}`,
+        )
+        .set(authenticatedAs());
+
+      expect(roleResponse.status).toBe(403);
+      expect(removeResponse.status).toBe(403);
+    },
+  );
+
+  it('returns 404 when changing or removing a member from another tenant', async () => {
+    const organization = stores.seedOrganization({
+      name: 'Ada Team',
+      slug: 'ada-team',
+      createdBy: userId,
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: userId,
+      role: 'owner',
+    });
+    const otherOrganization = stores.seedOrganization({
+      name: 'Grace Team',
+      slug: 'grace-team',
+      createdBy: otherUserId,
+    });
+    stores.seedMembership({
+      organization: otherOrganization._id,
+      user: otherUserId,
+      role: 'owner',
+    });
+
+    const roleResponse = await request(app)
+      .patch(`/api/v1/organizations/${organization._id}/members/${otherUserId}`)
+      .set(authenticatedAs())
+      .send({ role: 'member' });
+    const removeResponse = await request(app)
+      .delete(
+        `/api/v1/organizations/${organization._id}/members/${otherUserId}`,
+      )
+      .set(authenticatedAs());
+
+    expect(roleResponse.status).toBe(404);
+    expect(removeResponse.status).toBe(404);
+  });
+
+  it('prevents demoting or removing the final Owner, including self-removal', async () => {
+    const organization = stores.seedOrganization({
+      name: 'Ada Team',
+      slug: 'ada-team',
+      createdBy: userId,
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: userId,
+      role: 'owner',
+    });
+
+    const demoteResponse = await request(app)
+      .patch(`/api/v1/organizations/${organization._id}/members/${userId}`)
+      .set(authenticatedAs())
+      .send({ role: 'member' });
+    const removeResponse = await request(app)
+      .delete(`/api/v1/organizations/${organization._id}/members/${userId}`)
+      .set(authenticatedAs());
+
+    expect(demoteResponse.status).toBe(409);
+    expect(demoteResponse.body.error.code).toBe('LAST_OWNER');
+    expect(removeResponse.status).toBe(409);
+    expect(removeResponse.body.error.code).toBe('LAST_OWNER');
+    expect(stores.memberships).toHaveLength(1);
+    expect(stores.memberships[0].role).toBe('owner');
+  });
+
+  it('allows Owner self-removal when another Owner remains', async () => {
+    const organization = stores.seedOrganization({
+      name: 'Ada Team',
+      slug: 'ada-team',
+      createdBy: userId,
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: userId,
+      role: 'owner',
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: otherUserId,
+      role: 'owner',
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/organizations/${organization._id}/members/${userId}`)
+      .set(authenticatedAs());
+
+    expect(response.status).toBe(204);
+    expect(stores.memberships).toHaveLength(1);
+    expect(stores.memberships[0]).toMatchObject({
+      user: otherUserId,
+      role: 'owner',
+    });
+  });
+
+  it('allows an Admin to remove a non-Owner member', async () => {
+    const organization = stores.seedOrganization({
+      name: 'Ada Team',
+      slug: 'ada-team',
+      createdBy: userId,
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: userId,
+      role: 'admin',
+    });
+    stores.seedMembership({
+      organization: organization._id,
+      user: otherUserId,
+      role: 'member',
+    });
+
+    const response = await request(app)
+      .delete(
+        `/api/v1/organizations/${organization._id}/members/${otherUserId}`,
+      )
+      .set(authenticatedAs());
+
+    expect(response.status).toBe(204);
+    expect(stores.memberships).toHaveLength(1);
+    expect(stores.memberships[0]).toMatchObject({
+      user: userId,
+      role: 'admin',
+    });
   });
 });

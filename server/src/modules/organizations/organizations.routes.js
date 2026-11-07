@@ -5,17 +5,22 @@ import { loadContext } from '../../middleware/load-context.js';
 import { resolveOrganization } from '../../middleware/resolve-organization.js';
 import { validateBody } from '../../middleware/validate-body.js';
 import {
+  changeMemberRoleController,
   createOrganizationController,
   getOrganizationController,
   listOrganizationMembersController,
   listOrganizationsController,
+  removeMemberController,
 } from './organizations.controller.js';
 import {
   createInvitationController,
   listInvitationsController,
   revokeInvitationController,
 } from './invitations.controller.js';
-import { createOrganizationSchema } from './organizations.schema.js';
+import {
+  changeMemberRoleSchema,
+  createOrganizationSchema,
+} from './organizations.schema.js';
 import { createInvitationSchema } from './invitations.schema.js';
 
 export const organizationsRouter = Router();
@@ -32,6 +37,19 @@ organizationsRouter.get(
   loadContext,
   authorize('member:read'),
   listOrganizationMembersController,
+);
+organizationsRouter.patch(
+  '/:organizationId/members/:userId',
+  loadContext,
+  authorize('member:role'),
+  validateBody(changeMemberRoleSchema),
+  changeMemberRoleController,
+);
+organizationsRouter.delete(
+  '/:organizationId/members/:userId',
+  loadContext,
+  authorize('member:remove'),
+  removeMemberController,
 );
 organizationsRouter.post(
   '/:organizationId/invitations',
