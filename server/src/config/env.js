@@ -6,6 +6,10 @@ const nodeEnvSchema = z
   .default('development');
 const nodeEnv = nodeEnvSchema.parse(process.env.NODE_ENV);
 const testMode = nodeEnv === 'test';
+const logLevelSchema =
+  nodeEnv === 'production'
+    ? z.enum(['fatal', 'error', 'warn', 'info', 'silent'])
+    : z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']);
 const mongodbUriSchema = z
   .string()
   .url()
@@ -20,13 +24,16 @@ const jwtSecretSchema = z
     'JWT_ACCESS_SECRET must be replaced with a random secret',
   );
 const clientOriginSchema = z.string().url();
+const productionClientOriginSchema = clientOriginSchema.refine(
+  (origin) => /^https:/i.test(origin),
+  'CLIENT_ORIGIN must use HTTPS in production',
+);
+const rateLimitSchema = z.coerce.number().int().min(1).max(1000000);
 
 const envSchema = z.object({
   NODE_ENV: nodeEnvSchema,
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-  LOG_LEVEL: z
-    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
-    .default('info'),
+  LOG_LEVEL: logLevelSchema.default('info'),
   MONGODB_URI: testMode
     ? mongodbUriSchema.default('mongodb://127.0.0.1:27017/resolvehq-test')
     : mongodbUriSchema,
@@ -45,10 +52,40 @@ const envSchema = z.object({
     .min(testMode ? 4 : 10)
     .max(14)
     .default(testMode ? 4 : 12),
+  ORGANIZATION_CREATE_RATE_LIMIT: rateLimitSchema.default(testMode ? 1000 : 5),
+  ORGANIZATION_INVITATION_RATE_LIMIT: rateLimitSchema.default(
+    testMode ? 1000 : 20,
+  ),
+  INVITATION_ACCEPT_RATE_LIMIT: rateLimitSchema.default(testMode ? 1000 : 10),
+  MEMBER_MUTATION_RATE_LIMIT: rateLimitSchema.default(testMode ? 1000 : 30),
+  HTTPS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   CLIENT_ORIGIN:
     nodeEnv === 'production'
-      ? clientOriginSchema
+      ? productionClientOriginSchema
       : clientOriginSchema.default('http://localhost:5173'),
 });
 
-export const env = envSchema.parse(process.env);
+const parsedEnvironment = envSchema.safeParse(process.env);
+
+if (!parsedEnvironment.success) {
+  const invalidVariables = [
+    ...new Set(
+      parsedEnvironment.error.issues
+        .map((issue) => issue.path[0])
+        .filter((variable) => typeof variable === 'string'),
+    ),
+  ];
+  const variables =
+    invalidVariables.length > 0
+      ? invalidVariables.join(', ')
+      : 'server environment variables';
+
+  throw new Error(
+    `Invalid server environment configuration. Check ${variables} in server/.env against server/.env.example. Values are not included in this error.`,
+  );
+}
+
+export const env = parsedEnvironment.data;

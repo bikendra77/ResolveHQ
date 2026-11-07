@@ -7,22 +7,29 @@ on:
 jobs:
   foundation:
     runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Start isolated MongoDB replica set
+        run: |
+          docker run --detach --name resolvehq-integration-mongodb \
+            --publish 27018:27018 \
+            mongo:8.2 \
+            mongod --replSet rs0 --port 27018 --bind_ip_all
+          docker exec resolvehq-integration-mongodb mongosh --quiet --eval \
+            'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27018"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec resolvehq-integration-mongodb mongosh --quiet --eval \
+              'db.hello().isWritablePrimary' | grep -q true; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MongoDB replica set did not elect a writable primary" >&2
+          exit 1
       - run: npm ci --include=optional
       - name: Diagnose Rollup optional dependency installation
         run: |
@@ -65,3 +72,4 @@ jobs:
         run: npm test
         env:
           RESOLVEHQ_MONGODB_INTEGRATION: '1'
+          RESOLVEHQ_MONGODB_INTEGRATION_URI: mongodb://127.0.0.1:27018/resolvehq-integration?replicaSet=rs0

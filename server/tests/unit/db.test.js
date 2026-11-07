@@ -80,7 +80,7 @@ describe('database connection lifecycle', () => {
 
     expect(mocks.error).toHaveBeenCalledWith(
       { errorName: 'Error' },
-      'MongoDB connection failed',
+      'MongoDB connection failed. Verify MongoDB is running and MONGODB_URI points to a reachable database.',
     );
     expect(JSON.stringify(mocks.error.mock.calls)).not.toContain('password');
   });

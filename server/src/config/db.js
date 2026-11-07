@@ -30,7 +30,7 @@ export function connectDatabase() {
     .catch((error) => {
       logger.error(
         { errorName: errorName(error) },
-        'MongoDB connection failed',
+        'MongoDB connection failed. Verify MongoDB is running and MONGODB_URI points to a reachable database.',
       );
       throw error;
     })

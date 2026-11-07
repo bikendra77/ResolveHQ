@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import mongoose from 'mongoose';
 import request from 'supertest';
 import {
@@ -13,10 +13,21 @@ import {
 
 vi.mock('dotenv/config', () => ({}));
 
-// Opt in explicitly; this suite always targets a unique database on loopback.
+import {
+  assertSafeMongoIntegrationCleanup,
+  createMongoIntegrationTarget,
+} from './mongodb-test-target.js';
+
 const integrationEnabled = process.env.RESOLVEHQ_MONGODB_INTEGRATION === '1';
-const testDatabaseName = `resolvehq-auth-it-${process.pid}-${randomUUID()}`;
-const testMongoUri = `mongodb://127.0.0.1:27017/${testDatabaseName}`;
+const integrationTarget = integrationEnabled
+  ? createMongoIntegrationTarget(
+      process.env.RESOLVEHQ_MONGODB_INTEGRATION_URI,
+      process.pid,
+    )
+  : null;
+const testMongoUri =
+  integrationTarget?.uri ??
+  'mongodb://127.0.0.1:27018/resolvehq-integration-skipped?replicaSet=rs0';
 const testEnvironment = {
   NODE_ENV: 'test',
   MONGODB_URI: testMongoUri,
@@ -45,19 +56,27 @@ const origin = 'http://localhost:5173';
 const password = 'a sufficiently long password';
 
 afterAll(async () => {
+  let cleanupError;
   try {
     if (
       integrationEnabled &&
       mongoose.connection.readyState === 1 &&
-      mongoose.connection.name === testDatabaseName
+      integrationTarget
     ) {
-      try {
-        await mongoose.connection.dropDatabase();
-      } finally {
-        await mongoose.disconnect();
-      }
+      const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+      assertSafeMongoIntegrationCleanup(
+        integrationTarget,
+        mongoose.connection,
+        hello,
+      );
+      await mongoose.connection.dropDatabase();
     }
+  } catch (error) {
+    cleanupError = error;
   } finally {
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
     for (const [key, value] of Object.entries(previousEnvironment)) {
       if (value === undefined) {
         delete process.env[key];
@@ -66,6 +85,7 @@ afterAll(async () => {
       }
     }
   }
+  if (cleanupError) throw cleanupError;
 });
 
 function hashToken(token) {
@@ -101,25 +121,20 @@ async function clearTestData() {
 
 describe.skipIf(!integrationEnabled)('MongoDB-backed authentication', () => {
   beforeAll(async () => {
-    try {
-      const connection = await mongoose.connect(testMongoUri, {
-        maxPoolSize: 5,
-        serverSelectionTimeoutMS: 2000,
-      });
-      if (
-        connection.connection.name !== testDatabaseName ||
-        connection.connection.host !== '127.0.0.1'
-      ) {
-        throw new Error(
-          'Connected database does not match the isolated test target',
-        );
-      }
-      await Promise.all([User.init(), RefreshToken.init()]);
-    } catch {
-      throw new Error(
-        'MongoDB auth integration tests require a local MongoDB server listening at 127.0.0.1:27017; the suite creates only a unique resolvehq-auth-it-* database.',
-      );
+    if (!integrationTarget) {
+      throw new Error('MongoDB integration target was not configured');
     }
+    const connection = await mongoose.connect(testMongoUri, {
+      maxPoolSize: 5,
+      serverSelectionTimeoutMS: 3000,
+    });
+    const hello = await connection.connection.db.admin().command({ hello: 1 });
+    assertSafeMongoIntegrationCleanup(
+      integrationTarget,
+      connection.connection,
+      hello,
+    );
+    await Promise.all([User.init(), RefreshToken.init()]);
   }, 5000);
 
   beforeEach(clearTestData);

@@ -9,14 +9,20 @@
     "client",
     "server"
   ],
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "jsdom": "^26.1.0"
+  },
   "scripts": {
-    "dev": "npm run dev --workspace=resolvehq-client",
+    "dev": "node scripts/dev.mjs",
+    "dev:client": "npm run dev --workspace=resolvehq-client",
     "dev:server": "npm run dev --workspace=resolvehq-server",
     "start:server": "npm run start --workspace=resolvehq-server",
     "build": "npm run build --workspace=resolvehq-client",
     "lint": "npm run lint --workspaces",
     "format": "npm run format --workspaces",
     "format:check": "npm run format:check --workspaces",
-    "test": "npm test --workspace=resolvehq-server"
+    "test": "npm test --workspaces && node --test scripts/dev-config.test.mjs"
   }
 }

@@ -5,11 +5,15 @@ import pinoHttp from 'pino-http';
 import { logger } from './config/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFound } from './middleware/not-found.js';
+import { securityHeaders } from './middleware/security-headers.js';
 import { authRouter } from './modules/auth/auth.routes.js';
+import { invitationAcceptanceRouter } from './modules/organizations/invitations.routes.js';
+import { organizationsRouter } from './modules/organizations/organizations.routes.js';
 
 export const app = express();
 
 app.disable('x-powered-by');
+app.use(securityHeaders);
 app.use(
   pinoHttp({
     logger,
@@ -28,5 +32,7 @@ app.get('/healthz', (req, res) => {
 });
 
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/invitations', invitationAcceptanceRouter);
+app.use('/api/v1/organizations', organizationsRouter);
 app.use(notFound);
 app.use(errorHandler);
