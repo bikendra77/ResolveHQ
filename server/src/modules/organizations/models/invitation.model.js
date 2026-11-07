@@ -63,6 +63,10 @@ const invitationSchema = new mongoose.Schema(
 invitationSchema.index({ tokenHash: 1 }, { unique: true });
 invitationSchema.index({ organization: 1, email: 1, status: 1 });
 invitationSchema.index(
+  { organization: 1, email: 1 },
+  { unique: true, partialFilterExpression: { status: 'pending' } },
+);
+invitationSchema.index(
   { expiresAt: 1 },
   { expireAfterSeconds: INVITATION_TTL_CLEANUP_SECONDS },
 );

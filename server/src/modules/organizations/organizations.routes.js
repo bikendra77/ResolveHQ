@@ -10,7 +10,13 @@ import {
   listOrganizationMembersController,
   listOrganizationsController,
 } from './organizations.controller.js';
+import {
+  createInvitationController,
+  listInvitationsController,
+  revokeInvitationController,
+} from './invitations.controller.js';
 import { createOrganizationSchema } from './organizations.schema.js';
+import { createInvitationSchema } from './invitations.schema.js';
 
 export const organizationsRouter = Router();
 
@@ -26,6 +32,25 @@ organizationsRouter.get(
   loadContext,
   authorize('member:read'),
   listOrganizationMembersController,
+);
+organizationsRouter.post(
+  '/:organizationId/invitations',
+  loadContext,
+  authorize('member:invite'),
+  validateBody(createInvitationSchema),
+  createInvitationController,
+);
+organizationsRouter.get(
+  '/:organizationId/invitations',
+  loadContext,
+  authorize('member:invite'),
+  listInvitationsController,
+);
+organizationsRouter.delete(
+  '/:organizationId/invitations/:invitationId',
+  loadContext,
+  authorize('member:invite'),
+  revokeInvitationController,
 );
 organizationsRouter.get(
   '/:organizationId',

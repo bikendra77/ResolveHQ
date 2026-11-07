@@ -112,12 +112,16 @@ All organization endpoints require an authenticated access token. Organization
 creation derives its creator from the authenticated user; request bodies cannot
 set the creator, organization identifier, or membership role.
 
-| Method and path                                     | Request                         | Success                              |
-| --------------------------------------------------- | ------------------------------- | ------------------------------------ |
-| `GET /api/v1/organizations`                         | No body                         | `200` caller's organizations         |
-| `POST /api/v1/organizations`                        | JSON: `name`                    | `201` organization; caller is Owner  |
-| `GET /api/v1/organizations/:organizationId`         | MongoDB organization ID in path | `200` organization and caller role   |
-| `GET /api/v1/organizations/:organizationId/members` | Organization ID in path         | `200` organization members and roles |
+| Method and path                                                          | Request                                    | Success                              |
+| ------------------------------------------------------------------------ | ------------------------------------------ | ------------------------------------ |
+| `GET /api/v1/organizations`                                              | No body                                    | `200` caller's organizations         |
+| `POST /api/v1/organizations`                                             | JSON: `name`                               | `201` organization; caller is Owner  |
+| `GET /api/v1/organizations/:organizationId`                              | MongoDB organization ID in path            | `200` organization and caller role   |
+| `GET /api/v1/organizations/:organizationId/members`                      | Organization ID in path                    | `200` organization members and roles |
+| `POST /api/v1/organizations/:organizationId/invitations`                 | JSON: `email`, `role`                      | `201` invitation and acceptance URL  |
+| `GET /api/v1/organizations/:organizationId/invitations`                  | Optional `status` query                    | `200` invitations                    |
+| `DELETE /api/v1/organizations/:organizationId/invitations/:invitationId` | Organization and invitation IDs            | `204`                                |
+| `POST /api/v1/invitations/accept`                                        | JSON: `token`; authenticated matching user | `200` membership                     |
 
 `POST /api/v1/organizations` accepts a trimmed, non-empty name of at most 80
 characters and rejects unknown fields. Slugs are generated from the name in
@@ -149,6 +153,23 @@ Successful organization responses use this shape:
   }
 }
 ```
+
+Creating, listing, and revoking invitations requires `member:invite` (Owner
+and Admin). Invite roles are `admin`, `member`, or `viewer`; Owner cannot be
+assigned through an invitation. A pending invite cannot be duplicated for
+the same organization and normalized email. Existing members receive `409
+CONFLICT`.
+
+The acceptance URL contains a cryptographically random, single-use token; only
+its SHA-256 hash is stored. The invited person must authenticate with the
+matching email and submit the token to the acceptance endpoint. Tokens expire
+after seven days. Invalid, expired, revoked, or already-used tokens return
+`404 NOT_FOUND`; an email mismatch returns `403 FORBIDDEN`. Acceptance creates
+the membership and marks the invitation accepted in one transaction. If the
+user is already a member, acceptance returns `409 CONFLICT`.
+
+Invitation list responses contain only the invitation ID, email, role, status,
+expiry, and creation time; they never return the token hash or acceptance URL.
 
 The list response contains an `organizations` array with the same item shape.
 Memberships support multiple organizations; this API does not impose a

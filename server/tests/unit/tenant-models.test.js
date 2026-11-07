@@ -252,4 +252,19 @@ describe('Invitation model', () => {
       expireAfterSeconds: 30 * 24 * 60 * 60,
     });
   });
+
+  it('prevents concurrent pending invitations for the same organization and email', () => {
+    const pendingInvitationIndex = Invitation.schema
+      .indexes()
+      .find(
+        ([fields, options]) =>
+          fields.organization === 1 &&
+          fields.email === 1 &&
+          options.unique === true,
+      );
+
+    expect(pendingInvitationIndex[1].partialFilterExpression).toEqual({
+      status: 'pending',
+    });
+  });
 });

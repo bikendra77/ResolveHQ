@@ -6,9 +6,10 @@ this directory.
 
 ResolveHQ currently consists of a React/Vite single-page client and an Express
 API. The API is organized as a modular monolith with authentication and
-organization endpoints. Organization creation and membership-scoped tenant
-resolution establish the first tenant workflow; invitations and the
-product-management modules shown in the original blueprint remain future work.
+organization endpoints. Organization creation, membership-scoped tenant
+resolution, and invitation workflows establish the current tenant features;
+the product-management modules shown in the original blueprint remain future
+work.
 
 ## Components and request flow
 
@@ -90,6 +91,14 @@ uses the centralized `can()` permission checker. The members-list endpoint
 requires `member:read`, granted to all four organization roles, and queries
 memberships only for the resolved organization.
 
+Organization invitation creation, listing, and revocation require the
+`member:invite` permission. Invitation tokens are random, single-use values;
+the database stores only their SHA-256 hashes. Acceptance requires an
+authenticated user whose normalized email matches the invitation, and creates
+the membership while marking the invitation accepted in one transaction.
+Invitation expiry and the unique pending-invitation index prevent stale or
+duplicate invitations.
+
 `POST /api/v1/organizations` validates a strict `{ "name": "..." }` body,
 derives the creator from `req.user`, and creates the Organization and Owner
 Membership in one transaction. Slugs are normalized to URL-safe lowercase and
@@ -120,9 +129,9 @@ server/src/
 MongoDB models comprise `User`, `RefreshToken`, `Organization`, `Membership`,
 and `Invitation`. Organization and membership schemas establish tenant and
 organization-role references; invitations store only a SHA-256 token hash,
-with optional project assignments and expiry metadata. Tenant service workflows
-include organization listing, creation, membership-scoped detail, and
-organization member listing; invitation workflows are not implemented.
+with optional project assignments and expiry metadata. Tenant workflows
+include organization listing, creation, membership-scoped detail, member
+listing, and invitation creation, listing, revocation, and acceptance.
 
 ## Operational configuration
 
