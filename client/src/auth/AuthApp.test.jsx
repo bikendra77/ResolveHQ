@@ -57,6 +57,10 @@ function makeClient(overrides = {}) {
       invitation,
       acceptUrl: 'https://resolvehq.example/invite/secure-token',
     }),
+    acceptInvitation: vi.fn().mockResolvedValue({
+      organizationId: organization.id,
+      role: 'member',
+    }),
     changeOrganizationMemberRole: vi.fn().mockResolvedValue(null),
     removeOrganizationMember: vi.fn().mockResolvedValue(null),
     revokeOrganizationInvitation: vi.fn().mockResolvedValue(null),
@@ -138,6 +142,204 @@ afterEach(async () => {
 });
 
 describe('authentication screens and session routing', () => {
+  it('preserves an unauthenticated invite link through signup and accepts it', async () => {
+    const token = 'A'.repeat(43);
+    const organizations = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ ...organization, role: 'member' }]);
+    const client = await mount(
+      `/invite/${token}`,
+      makeClient({ organizations }),
+    );
+    const returnTo = `/invite/${token}`;
+
+    expect(document.body.textContent).toContain('Join your team');
+    expect(
+      document.querySelector('a[href^="/login?"]').getAttribute('href'),
+    ).toBe(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+    expect(
+      document.querySelector('a[href^="/register?"]').getAttribute('href'),
+    ).toBe(`/register?returnTo=${encodeURIComponent(returnTo)}`);
+    expect(client.acceptInvitation).not.toHaveBeenCalled();
+
+    await click(document.querySelector('a[href^="/register?"]'));
+    expect(window.location.pathname).toBe('/register');
+    setInput('register-name', 'Ada Lovelace');
+    setInput('register-email', 'ada@example.com');
+    setInput('register-password', 'long enough password');
+    setInput('register-confirm-password', 'long enough password');
+    await submitForm();
+
+    expect(window.location.pathname).toBe(`/invite/${token}`);
+    expect(
+      document.querySelector('button[type="button"]')?.textContent,
+    ).toMatch(/accept invitation/i);
+    await click(
+      Array.from(document.querySelectorAll('button')).find((button) =>
+        button.textContent.includes('Accept invitation'),
+      ),
+    );
+
+    expect(client.acceptInvitation).toHaveBeenCalledWith(token);
+    expect(organizations).toHaveBeenCalledTimes(2);
+    expect(window.location.pathname).toBe('/app');
+    expect(
+      new URLSearchParams(window.location.search).get('organization'),
+    ).toBe(organization.id);
+    expect(new URLSearchParams(window.location.search).get('notice')).toBe(
+      'invitation-accepted',
+    );
+    expect(document.querySelector('[role="status"]')?.textContent).toContain(
+      'Ada Team',
+    );
+  });
+
+  it('explains the shared unavailable response for invalid, expired, or revoked invitations', async () => {
+    const token = 'B'.repeat(43);
+    const client = makeClient({
+      refresh: vi.fn().mockResolvedValue(true),
+      acceptInvitation: vi.fn().mockRejectedValue({
+        status: 404,
+        code: 'NOT_FOUND',
+        message: 'Invitation not found or expired',
+      }),
+    });
+    await mount(`/invite/${token}`, client);
+
+    await click(
+      Array.from(document.querySelectorAll('button')).find((button) =>
+        button.textContent.includes('Accept invitation'),
+      ),
+    );
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toMatch(
+      /invalid, expired, revoked, or already accepted/i,
+    );
+    expect(
+      Array.from(document.querySelectorAll('button')).find((button) =>
+        button.textContent.includes('Accept invitation'),
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it('returns a signed-in user without organizations to the invitation after login', async () => {
+    const token = 'E'.repeat(43);
+    const client = makeClient({
+      organizations: vi.fn().mockResolvedValue([]),
+    });
+    await mount(`/invite/${token}`, client);
+
+    await click(document.querySelector('a[href^="/login?"]'));
+    setInput('login-email', 'ada@example.com');
+    setInput('login-password', 'correct horse');
+    await submitForm();
+
+    expect(client.login).toHaveBeenCalledWith({
+      email: 'ada@example.com',
+      password: 'correct horse',
+    });
+    expect(window.location.pathname).toBe(`/invite/${token}`);
+    expect(
+      Array.from(document.querySelectorAll('button')).some((button) =>
+        button.textContent.includes('Accept invitation'),
+      ),
+    ).toBe(true);
+  });
+
+  it('explains email mismatch and lets the user switch to the invited account', async () => {
+    const token = 'C'.repeat(43);
+    const client = makeClient({
+      refresh: vi.fn().mockResolvedValue(true),
+      acceptInvitation: vi.fn().mockRejectedValue({
+        status: 403,
+        code: 'FORBIDDEN',
+        message: 'Invitation email does not match the authenticated user',
+      }),
+    });
+    await mount(`/invite/${token}`, client);
+
+    await click(
+      Array.from(document.querySelectorAll('button')).find((button) =>
+        button.textContent.includes('Accept invitation'),
+      ),
+    );
+    expect(document.querySelector('[role="alert"]')?.textContent).toMatch(
+      /different email address/i,
+    );
+
+    await click(
+      Array.from(document.querySelectorAll('button')).find((button) =>
+        button.textContent.includes('Use another account'),
+      ),
+    );
+    expect(client.logout).toHaveBeenCalledOnce();
+    expect(window.location.pathname).toBe('/login');
+    expect(new URLSearchParams(window.location.search).get('returnTo')).toBe(
+      `/invite/${token}`,
+    );
+  });
+
+  it('retries organization refresh after acceptance before opening the workspace', async () => {
+    const token = 'D'.repeat(43);
+    const invitedOrganization = {
+      ...organization,
+      id: '665f00000000000000000011',
+      name: 'Grace Team',
+      slug: 'grace-team',
+      role: 'member',
+    };
+    const organizations = vi
+      .fn()
+      .mockResolvedValueOnce([organization])
+      .mockRejectedValueOnce(new Error('Network unavailable'))
+      .mockResolvedValueOnce([organization, invitedOrganization]);
+    await mount(
+      `/invite/${token}`,
+      makeClient({
+        refresh: vi.fn().mockResolvedValue(true),
+        organizations,
+        acceptInvitation: vi.fn().mockResolvedValue({
+          organizationId: invitedOrganization.id,
+          role: invitedOrganization.role,
+        }),
+      }),
+    );
+
+    await click(
+      Array.from(document.querySelectorAll('button')).find((button) =>
+        button.textContent.includes('Accept invitation'),
+      ),
+    );
+    expect(document.querySelector('[role="alert"]')?.textContent).toMatch(
+      /invitation was accepted/i,
+    );
+    expect(window.location.pathname).toBe(`/invite/${token}`);
+
+    await click(
+      Array.from(document.querySelectorAll('button')).find((button) =>
+        button.textContent.includes('Retry and continue'),
+      ),
+    );
+    expect(organizations).toHaveBeenCalledTimes(3);
+    expect(window.location.pathname).toBe('/app');
+    expect(
+      new URLSearchParams(window.location.search).get('organization'),
+    ).toBe(invitedOrganization.id);
+    expect(document.querySelector('.workspace-label strong')?.textContent).toBe(
+      invitedOrganization.name,
+    );
+  });
+
+  it('rejects malformed invitation tokens without calling the API', async () => {
+    const client = await mount('/invite/not-a-valid-token');
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toMatch(
+      /invitation link is invalid/i,
+    );
+    expect(client.acceptInvitation).not.toHaveBeenCalled();
+  });
+
   it('manages organization members and invitations for an Owner', async () => {
     const client = await mount(
       '/app/members',

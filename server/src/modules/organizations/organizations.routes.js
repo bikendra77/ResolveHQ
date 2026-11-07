@@ -5,6 +5,11 @@ import { loadContext } from '../../middleware/load-context.js';
 import { resolveOrganization } from '../../middleware/resolve-organization.js';
 import { validateBody } from '../../middleware/validate-body.js';
 import {
+  memberMutationRateLimit,
+  organizationCreateRateLimit,
+  organizationInvitationRateLimit,
+} from './organizations.rate-limit.js';
+import {
   changeMemberRoleController,
   createOrganizationController,
   getOrganizationController,
@@ -29,6 +34,7 @@ organizationsRouter.use(authenticate);
 organizationsRouter.get('/', listOrganizationsController);
 organizationsRouter.post(
   '/',
+  organizationCreateRateLimit,
   validateBody(createOrganizationSchema),
   createOrganizationController,
 );
@@ -40,6 +46,7 @@ organizationsRouter.get(
 );
 organizationsRouter.patch(
   '/:organizationId/members/:userId',
+  memberMutationRateLimit,
   loadContext,
   authorize('member:role'),
   validateBody(changeMemberRoleSchema),
@@ -47,12 +54,14 @@ organizationsRouter.patch(
 );
 organizationsRouter.delete(
   '/:organizationId/members/:userId',
+  memberMutationRateLimit,
   loadContext,
   authorize('member:remove'),
   removeMemberController,
 );
 organizationsRouter.post(
   '/:organizationId/invitations',
+  organizationInvitationRateLimit,
   loadContext,
   authorize('member:invite'),
   validateBody(createInvitationSchema),
@@ -66,6 +75,7 @@ organizationsRouter.get(
 );
 organizationsRouter.delete(
   '/:organizationId/invitations/:invitationId',
+  organizationInvitationRateLimit,
   loadContext,
   authorize('member:invite'),
   revokeInvitationController,

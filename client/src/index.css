@@ -465,6 +465,65 @@ a {
   margin-top: var(--space-8);
 }
 
+.invitation-content {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-8);
+}
+
+.invitation-content > p {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+.invitation-content .invitation-identity {
+  color: var(--text-secondary);
+}
+
+.invitation-actions {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.invitation-actions .primary-button {
+  margin-top: 0;
+  text-decoration: none;
+}
+
+.invitation-secondary-link {
+  justify-self: center;
+  color: var(--brand-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.invitation-secondary-link:hover {
+  text-decoration: underline;
+}
+
+.invitation-secondary-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-shadow);
+}
+
+.invitation-alert {
+  margin-top: var(--space-5);
+}
+
+.invitation-success {
+  margin-bottom: var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid #bfdfcb;
+  border-radius: var(--radius-sm);
+  color: #195d38;
+  background: #eff8f1;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
 .register-form {
   gap: var(--space-4);
   margin-top: var(--space-6);

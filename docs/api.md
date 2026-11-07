@@ -232,5 +232,13 @@ BAD_REQUEST`; unmatched routes return `404`; unexpected server failures return
 - Refresh: 30 requests per 15 minutes.
 
 The limits use in-memory stores; they are not coordinated across API instances.
-Test mode uses elevated limits. The API does not currently document a
-distributed rate-limit store or a production CORS configuration.
+Registration, login, and refresh retain their authentication limits. Organization
+creation, invitation creation/revocation, invitation acceptance, and member
+role/removal mutations also have per-IP limits with a 15-minute window. Their
+production defaults are configurable with `ORGANIZATION_CREATE_RATE_LIMIT`
+(5), `ORGANIZATION_INVITATION_RATE_LIMIT` (20),
+`INVITATION_ACCEPT_RATE_LIMIT` (10), and `MEMBER_MUTATION_RATE_LIMIT` (30).
+Test mode uses elevated limits. For multiple API instances, configure a shared
+rate-limit store; the default in-memory store is per process. Configure
+`HTTPS_ENABLED=true` only when production traffic is guaranteed to use HTTPS;
+otherwise HSTS remains disabled.

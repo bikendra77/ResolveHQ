@@ -63,6 +63,7 @@ function PasswordInput({ id, label, value, onChange, autoComplete, hint }) {
 export function AuthFrame({ mode, children, switchHref }) {
   const registering = mode === 'register';
   const onboarding = mode === 'onboarding';
+  const invitation = mode === 'invitation';
   return (
     <main className="auth-screen">
       <aside className="auth-aside">
@@ -98,6 +99,8 @@ export function AuthFrame({ mode, children, switchHref }) {
           <Brand compact />
           {onboarding ? (
             <p>Workspace setup</p>
+          ) : invitation ? (
+            <p>Secure invitation</p>
           ) : (
             <p>
               {registering ? 'Already have an account?' : 'New to ResolveHQ?'}{' '}
@@ -112,23 +115,29 @@ export function AuthFrame({ mode, children, switchHref }) {
             <p className="eyebrow">
               {onboarding
                 ? 'One last step'
-                : registering
-                  ? 'Get started'
-                  : 'Welcome back'}
+                : invitation
+                  ? 'Organization invitation'
+                  : registering
+                    ? 'Get started'
+                    : 'Welcome back'}
             </p>
             <h2>
               {onboarding
                 ? 'Name your organization'
-                : registering
-                  ? 'Create your account'
-                  : 'Sign in to your workspace'}
+                : invitation
+                  ? 'Join your team'
+                  : registering
+                    ? 'Create your account'
+                    : 'Sign in to your workspace'}
             </h2>
             <p className="form-intro">
               {onboarding
                 ? 'Choose the name your team will recognize.'
-                : registering
-                  ? 'A few details and you’re ready to get to work.'
-                  : 'Pick up where your team left off.'}
+                : invitation
+                  ? 'Accept your invitation to join your organization workspace.'
+                  : registering
+                    ? 'A few details and you’re ready to get to work.'
+                    : 'Pick up where your team left off.'}
             </p>
             {children}
           </div>

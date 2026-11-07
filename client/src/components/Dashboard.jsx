@@ -61,7 +61,18 @@ function NavigationItem({ label, href, active, icon, soon }) {
 export function Dashboard() {
   const { user, organizations, signOut } = useAuth();
   const location = useLocation();
-  const organization = organizations[0];
+  const query = location.includes('?')
+    ? location.slice(location.indexOf('?') + 1)
+    : '';
+  const queryParams = new URLSearchParams(query);
+  const requestedOrganizationId = queryParams.get('organization');
+  const acceptedOrganization = organizations.find(
+    (candidate) => candidate.id === requestedOrganizationId,
+  );
+  const organization = acceptedOrganization || organizations[0];
+  const showInvitationNotice =
+    queryParams.get('notice') === 'invitation-accepted' &&
+    Boolean(acceptedOrganization);
   const isMembersPage = location.split('?')[0] === '/app/members';
   const pageTitle = isMembersPage ? 'Members' : 'Overview';
   const [busy, setBusy] = useState(false);
@@ -84,7 +95,10 @@ export function Dashboard() {
   return (
     <div className="app-shell">
       <aside className="app-sidebar" aria-label="Workspace navigation">
-        <Link className="brand app-brand" href="/app">
+        <Link
+          className="brand app-brand"
+          href={`/app?organization=${encodeURIComponent(organization.id)}`}
+        >
           <span className="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 28 28" fill="none">
               <path d="M5 8.5 14 4l9 4.5v11L14 24l-9-4.5v-11Z" />
@@ -113,6 +127,11 @@ export function Dashboard() {
             <NavigationItem
               key={item.label}
               {...item}
+              href={
+                item.href
+                  ? `${item.href}?organization=${encodeURIComponent(organization.id)}`
+                  : undefined
+              }
               active={item.href === (isMembersPage ? '/app/members' : '/app')}
             />
           ))}
@@ -172,6 +191,12 @@ export function Dashboard() {
         <div
           className={`dashboard-content${isMembersPage ? ' is-members-page' : ''}`}
         >
+          {showInvitationNotice && (
+            <div className="invitation-success" role="status">
+              Invitation accepted. You’re now a member of{' '}
+              <strong>{acceptedOrganization.name}</strong>.
+            </div>
+          )}
           <div className="welcome-heading">
             <div>
               <p className="eyebrow">Your workspace</p>

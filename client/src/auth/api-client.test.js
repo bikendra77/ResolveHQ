@@ -188,6 +188,29 @@ describe('authentication API client', () => {
     });
   });
 
+  it('accepts invitations through the authenticated acceptance endpoint', async () => {
+    apiClient.setAccessToken('short-lived-access-token');
+    const acceptance = {
+      organizationId: '665f00000000000000000010',
+      role: 'member',
+    };
+    fetchMock.mockResolvedValueOnce(response(200, { data: acceptance }));
+
+    await expect(apiClient.acceptInvitation('A'.repeat(43))).resolves.toEqual(
+      acceptance,
+    );
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1/invitations/accept');
+    expect(options.method).toBe('POST');
+    expect(options.credentials).toBe('include');
+    expect(options.headers.get('Authorization')).toBe(
+      'Bearer short-lived-access-token',
+    );
+    expect(options.headers.get('Content-Type')).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual({ token: 'A'.repeat(43) });
+  });
+
   it('loads the current user with the in-memory access token and includes cookies', async () => {
     apiClient.setAccessToken('short-lived-access-token');
     fetchMock.mockResolvedValueOnce(response(200, { data: { user } }));

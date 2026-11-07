@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useAuth } from './auth/useAuth.js';
 import { Dashboard } from './components/Dashboard.jsx';
 import { LoginPage, RegisterPage } from './components/AuthPages.jsx';
+import { InvitationAcceptancePage } from './components/InvitationAcceptance.jsx';
 import { OrganizationOnboardingPage } from './components/OrganizationOnboarding.jsx';
 import { navigate, safeReturnPath, useLocation } from './routing.js';
 
@@ -44,6 +45,8 @@ function AppRoutes() {
   const queryIndex = location.indexOf('?');
   const pathname = queryIndex === -1 ? location : location.slice(0, queryIndex);
   const search = queryIndex === -1 ? '' : location.slice(queryIndex);
+  const invitationMatch = pathname.match(/^\/invite\/([^/]+)$/);
+  const invitationToken = invitationMatch?.[1] ?? null;
 
   useEffect(() => {
     if (status === 'loading' || organizationsStatus === 'loading') {
@@ -52,11 +55,19 @@ function AppRoutes() {
 
     if (pathname === '/login' || pathname === '/register') {
       if (status === 'authenticated' && organizationsStatus === 'ready') {
-        navigate(
-          organizations.length > 0 ? safeReturnPath(search) : '/onboarding',
-          { replace: true },
-        );
+        const returnPath = safeReturnPath(search);
+        const returnPathname = returnPath.split(/[?#]/, 1)[0];
+        const returningToInvitation = /^\/invite\/[^/]+$/.test(returnPathname);
+        const destination =
+          returningToInvitation || organizations.length > 0
+            ? returnPath
+            : '/onboarding';
+        navigate(destination, { replace: true });
       }
+      return;
+    }
+
+    if (invitationToken) {
       return;
     }
 
@@ -82,7 +93,14 @@ function AppRoutes() {
     if (pathname !== destination) {
       navigate(destination, { replace: true });
     }
-  }, [organizations.length, organizationsStatus, pathname, search, status]);
+  }, [
+    invitationToken,
+    organizations.length,
+    organizationsStatus,
+    pathname,
+    search,
+    status,
+  ]);
 
   if (
     status === 'loading' ||
@@ -91,8 +109,16 @@ function AppRoutes() {
     return <LoadingScreen />;
   }
 
-  if (status === 'authenticated' && organizationsStatus === 'error') {
+  if (
+    status === 'authenticated' &&
+    organizationsStatus === 'error' &&
+    !invitationToken
+  ) {
     return <OrganizationLoadError onRetry={refreshOrganizations} />;
+  }
+
+  if (invitationToken) {
+    return <InvitationAcceptancePage token={invitationToken} />;
   }
 
   if (pathname === '/login' && status === 'anonymous') {

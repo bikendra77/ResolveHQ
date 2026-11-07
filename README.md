@@ -151,9 +151,22 @@ delivered in a Secure, HttpOnly, SameSite=Strict cookie. The browser keeps
 access tokens in memory. Authentication routes validate request bodies, use
 rate limits, and redact sensitive fields from structured logs.
 
-The rate-limit store is in-memory and is not shared across instances. The
-application does not currently configure a production CORS allowlist or
-deployment reverse proxy. Production deployment, multi-instance operation,
-and the full security-hardening checklist remain unverified. Keep the client
-and API same-origin behind a correctly configured proxy, and set
-`CLIENT_ORIGIN` to the exact browser origin.
+Authentication and sensitive organization mutations are rate limited. The
+organization limits are configurable with
+`ORGANIZATION_CREATE_RATE_LIMIT` (default 5),
+`ORGANIZATION_INVITATION_RATE_LIMIT` (default 20),
+`INVITATION_ACCEPT_RATE_LIMIT` (default 10), and
+`MEMBER_MUTATION_RATE_LIMIT` (default 30), per IP per 15-minute window.
+The default express-rate-limit store is in-memory and is not shared across
+instances; configure a shared store before running multiple API instances.
+
+The API sends Helmet security headers, including a restrictive Content
+Security Policy, frame protection, and MIME-sniffing protection. HSTS is
+disabled by default. Set `HTTPS_ENABLED=true` only when production traffic is
+guaranteed to use HTTPS end-to-end.
+
+The application does not configure a production CORS allowlist or deployment
+reverse proxy. Production deployment, multi-instance operation, and the full
+security-hardening checklist remain unverified. Keep the client and API
+same-origin behind a correctly configured proxy, and set `CLIENT_ORIGIN` to
+the exact browser origin.

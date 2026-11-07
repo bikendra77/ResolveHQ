@@ -139,8 +139,9 @@ The API reads `NODE_ENV`, `PORT` (default `4000`), `LOG_LEVEL` (default
 `info`), `MONGODB_URI`, `JWT_ACCESS_SECRET`, `ACCESS_TOKEN_TTL` (fixed at
 `15m`), `REFRESH_TOKEN_TTL_DAYS` (fixed at `7`), `BCRYPT_COST` (default `12`,
 allowed `10`–`14` outside tests), and `CLIENT_ORIGIN`. Production requires a
-valid MongoDB URI, non-placeholder secret of at least 32 characters, and valid
-client origin. Test mode supplies test defaults and a lower bcrypt cost.
+valid MongoDB URI, non-placeholder secret of at least 32 characters, an HTTPS
+client origin, and a non-verbose logging level (`fatal`, `error`, `warn`,
+`info`, or `silent`). Test mode supplies test defaults and a lower bcrypt cost.
 
 The client reads `VITE_APP_NAME` and `VITE_API_BASE_URL` (default `/api/v1`).
 These values are public. Production hosting and same-origin reverse-proxy

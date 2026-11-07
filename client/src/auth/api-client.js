@@ -200,6 +200,14 @@ export const apiClient = {
     return result.data;
   },
 
+  async acceptInvitation(token) {
+    const result = await send('/invitations/accept', {
+      method: 'POST',
+      body: bodyJson({ token }),
+    });
+    return result.data;
+  },
+
   async revokeOrganizationInvitation(organizationId, invitationId) {
     return send(
       `/organizations/${encodeURIComponent(organizationId)}/invitations/${encodeURIComponent(invitationId)}`,
