@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/useAuth.js';
 import { Link } from './Link.jsx';
-import { navigate } from '../routing.js';
+import { navigate, useLocation } from '../routing.js';
+import { OrganizationMembersPanel } from './OrganizationMembersPanel.jsx';
 
 const navigation = [
-  { label: 'Overview', active: true, icon: '◫' },
+  { label: 'Overview', href: '/app', icon: '◫' },
+  { label: 'Members', href: '/app/members', icon: '♧' },
   { label: 'My work', icon: '▤', soon: true },
   { label: 'Activity', icon: '◷', soon: true },
 ];
@@ -25,7 +27,7 @@ function UserAvatar({ name }) {
   );
 }
 
-function NavigationItem({ label, active, icon, soon }) {
+function NavigationItem({ label, href, active, icon, soon }) {
   const className = `side-nav-item${active ? ' is-active' : ''}${soon ? ' is-upcoming' : ''}`;
   const content = (
     <>
@@ -48,7 +50,7 @@ function NavigationItem({ label, active, icon, soon }) {
   return (
     <Link
       className={className}
-      href="/app"
+      href={href}
       aria-current={active ? 'page' : undefined}
     >
       {content}
@@ -58,7 +60,10 @@ function NavigationItem({ label, active, icon, soon }) {
 
 export function Dashboard() {
   const { user, organizations, signOut } = useAuth();
+  const location = useLocation();
   const organization = organizations[0];
+  const isMembersPage = location.split('?')[0] === '/app/members';
+  const pageTitle = isMembersPage ? 'Members' : 'Overview';
   const [busy, setBusy] = useState(false);
 
   async function handleSignOut() {
@@ -105,7 +110,11 @@ export function Dashboard() {
         <p className="nav-label">Workspace</p>
         <nav className="side-nav">
           {navigation.map((item) => (
-            <NavigationItem key={item.label} {...item} />
+            <NavigationItem
+              key={item.label}
+              {...item}
+              active={item.href === (isMembersPage ? '/app/members' : '/app')}
+            />
           ))}
         </nav>
 
@@ -141,7 +150,7 @@ export function Dashboard() {
           <div className="breadcrumb">
             <span>{organization.name}</span>
             <span aria-hidden="true">/</span>
-            <strong>Overview</strong>
+            <strong>{pageTitle}</strong>
           </div>
           <div className="topbar-actions">
             <span className="connection-status">
@@ -160,7 +169,9 @@ export function Dashboard() {
           </div>
         </header>
 
-        <div className="dashboard-content">
+        <div
+          className={`dashboard-content${isMembersPage ? ' is-members-page' : ''}`}
+        >
           <div className="welcome-heading">
             <div>
               <p className="eyebrow">Your workspace</p>
@@ -250,6 +261,9 @@ export function Dashboard() {
               </span>
             </article>
           </section>
+          {isMembersPage && (
+            <OrganizationMembersPanel organization={organization} user={user} />
+          )}
         </div>
       </main>
     </div>

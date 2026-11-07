@@ -164,6 +164,49 @@ export const apiClient = {
     return result.data.organization;
   },
 
+  async organizationMembers(organizationId) {
+    const result = await send(
+      `/organizations/${encodeURIComponent(organizationId)}/members`,
+    );
+    return result.data.members;
+  },
+
+  async changeOrganizationMemberRole(organizationId, userId, role) {
+    return send(
+      `/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(userId)}`,
+      { method: 'PATCH', body: bodyJson({ role }) },
+    );
+  },
+
+  async removeOrganizationMember(organizationId, userId) {
+    return send(
+      `/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(userId)}`,
+      { method: 'DELETE' },
+    );
+  },
+
+  async organizationInvitations(organizationId) {
+    const result = await send(
+      `/organizations/${encodeURIComponent(organizationId)}/invitations`,
+    );
+    return result.data.invitations;
+  },
+
+  async createOrganizationInvitation(organizationId, details) {
+    const result = await send(
+      `/organizations/${encodeURIComponent(organizationId)}/invitations`,
+      { method: 'POST', body: bodyJson(details) },
+    );
+    return result.data;
+  },
+
+  async revokeOrganizationInvitation(organizationId, invitationId) {
+    return send(
+      `/organizations/${encodeURIComponent(organizationId)}/invitations/${encodeURIComponent(invitationId)}`,
+      { method: 'DELETE' },
+    );
+  },
+
   async logout() {
     return send('/auth/logout', { method: 'POST' }, { authenticated: false });
   },

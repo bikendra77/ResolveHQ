@@ -73,6 +73,7 @@ export function AuthProvider({ children, client = apiClient }) {
   const value = useMemo(
     () => ({
       ...session,
+      organizationApi: client,
       organizations,
       organizationsStatus,
       organizationsError,

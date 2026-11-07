@@ -15,6 +15,21 @@ const organization = {
   slug: 'ada-team',
   role: 'owner',
 };
+const member = {
+  id: '665f00000000000000000002',
+  name: 'Grace Hopper',
+  email: 'grace@example.com',
+  role: 'member',
+  joinedAt: '2025-01-01T00:00:00.000Z',
+};
+const invitation = {
+  id: '665f00000000000000000020',
+  email: 'grace@example.com',
+  role: 'member',
+  status: 'pending',
+  expiresAt: '2026-11-14T00:00:00.000Z',
+  createdAt: '2026-11-07T00:00:00.000Z',
+};
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -34,6 +49,17 @@ function makeClient(overrides = {}) {
       name,
       slug: name.toLowerCase().replace(/\s+/g, '-'),
     })),
+    organizationMembers: vi
+      .fn()
+      .mockResolvedValue([{ ...user, role: organization.role }, member]),
+    organizationInvitations: vi.fn().mockResolvedValue([invitation]),
+    createOrganizationInvitation: vi.fn().mockResolvedValue({
+      invitation,
+      acceptUrl: 'https://resolvehq.example/invite/secure-token',
+    }),
+    changeOrganizationMemberRole: vi.fn().mockResolvedValue(null),
+    removeOrganizationMember: vi.fn().mockResolvedValue(null),
+    revokeOrganizationInvitation: vi.fn().mockResolvedValue(null),
     logout: vi.fn().mockResolvedValue(null),
     ...overrides,
   };
@@ -72,6 +98,16 @@ function setInput(id, value) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function setSelect(id, value) {
+  const select = document.getElementById(id);
+  const setter = Object.getOwnPropertyDescriptor(
+    window.HTMLSelectElement.prototype,
+    'value',
+  ).set;
+  setter.call(select, value);
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 async function submitForm() {
   await act(async () => {
     document
@@ -102,6 +138,180 @@ afterEach(async () => {
 });
 
 describe('authentication screens and session routing', () => {
+  it('manages organization members and invitations for an Owner', async () => {
+    const client = await mount(
+      '/app/members',
+      makeClient({ refresh: vi.fn().mockResolvedValue(true) }),
+    );
+
+    expect(window.location.pathname).toBe('/app/members');
+    expect(document.getElementById('members-title')?.textContent).toBe(
+      'Members',
+    );
+    expect(client.organizationMembers).toHaveBeenCalledWith(organization.id);
+    expect(client.organizationInvitations).toHaveBeenCalledWith(
+      organization.id,
+    );
+    expect(document.body.textContent).toContain('Grace Hopper');
+    expect(document.body.textContent).toContain('Invitations');
+
+    setInput('invite-email', '  grace@example.com  ');
+    setSelect('invite-role', 'viewer');
+    await submitForm();
+    expect(client.createOrganizationInvitation).toHaveBeenCalledWith(
+      organization.id,
+      { email: 'grace@example.com', role: 'viewer' },
+    );
+    expect(document.getElementById('created-invitation-link').value).toBe(
+      'https://resolvehq.example/invite/secure-token',
+    );
+    expect(document.querySelector('[role="status"]')?.textContent).toMatch(
+      /invitation created/i,
+    );
+
+    setSelect(`member-role-${member.id}`, 'admin');
+    const saveRoleButton = Array.from(
+      document.querySelectorAll('.member-actions button'),
+    ).find((button) => button.textContent.includes('Save role'));
+    await click(saveRoleButton);
+    expect(client.changeOrganizationMemberRole).toHaveBeenCalledWith(
+      organization.id,
+      member.id,
+      'admin',
+    );
+
+    const removeButton = Array.from(
+      document.querySelectorAll('.member-actions button'),
+    ).find((button) => button.textContent.trim() === 'Remove');
+    await click(removeButton);
+    expect(client.removeOrganizationMember).toHaveBeenCalledWith(
+      organization.id,
+      member.id,
+    );
+
+    await click(
+      Array.from(document.querySelectorAll('.invitation-list button')).find(
+        (button) => button.textContent.includes('Revoke'),
+      ),
+    );
+    expect(client.revokeOrganizationInvitation).toHaveBeenCalledWith(
+      organization.id,
+      invitation.id,
+    );
+  });
+
+  it('hides invitation and member controls from a Viewer', async () => {
+    const viewerOrganization = { ...organization, role: 'viewer' };
+    const client = await mount(
+      '/app/members',
+      makeClient({
+        refresh: vi.fn().mockResolvedValue(true),
+        organizations: vi.fn().mockResolvedValue([viewerOrganization]),
+      }),
+    );
+
+    expect(client.organizationMembers).toHaveBeenCalledWith(organization.id);
+    expect(client.organizationInvitations).not.toHaveBeenCalled();
+    expect(document.getElementById('invite-email')).toBeNull();
+    expect(document.querySelector('.member-actions')).toBeNull();
+    expect(document.body.textContent).toContain('Grace Hopper');
+  });
+
+  it('limits Admin role changes and protects Owner memberships in the UI', async () => {
+    const adminOrganization = { ...organization, role: 'admin' };
+    const otherAdmin = {
+      ...member,
+      id: '665f00000000000000000003',
+      name: 'Linus Torvalds',
+      role: 'admin',
+    };
+    const anotherOwner = {
+      ...member,
+      id: '665f00000000000000000004',
+      name: 'Katherine Johnson',
+      role: 'owner',
+    };
+    const client = await mount(
+      '/app/members',
+      makeClient({
+        refresh: vi.fn().mockResolvedValue(true),
+        organizations: vi.fn().mockResolvedValue([adminOrganization]),
+        organizationMembers: vi
+          .fn()
+          .mockResolvedValue([
+            { ...user, role: 'admin' },
+            member,
+            otherAdmin,
+            anotherOwner,
+          ]),
+      }),
+    );
+
+    expect(
+      Array.from(
+        document.querySelector('#member-role-665f00000000000000000002').options,
+      ).map((option) => option.value),
+    ).toEqual(['member', 'viewer']);
+    expect(
+      document.getElementById('member-role-665f00000000000000000003'),
+    ).toBeNull();
+    expect(
+      document.getElementById('member-role-665f00000000000000000004'),
+    ).toBeNull();
+    expect(client.organizationInvitations).toHaveBeenCalledWith(
+      organization.id,
+    );
+    expect(document.querySelectorAll('.member-table select')).toHaveLength(1);
+  });
+
+  it('disables role changes and removal for the final Owner', async () => {
+    await mount(
+      '/app/members',
+      makeClient({
+        refresh: vi.fn().mockResolvedValue(true),
+        organizationMembers: vi
+          .fn()
+          .mockResolvedValue([{ ...user, role: 'owner' }, member]),
+      }),
+    );
+
+    const ownerRow = document.querySelector('tbody tr');
+    expect(ownerRow.textContent).toContain('Final Owner protected');
+    expect(ownerRow.querySelector('select')).toBeNull();
+    expect(
+      Array.from(ownerRow.querySelectorAll('button')).some((button) =>
+        button.textContent.includes('Remove'),
+      ),
+    ).toBe(false);
+  });
+
+  it('shows member loading errors and retries successfully', async () => {
+    const organizationMembers = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Members are unavailable'))
+      .mockResolvedValue([{ ...user, role: 'owner' }, member]);
+    const client = await mount(
+      '/app/members',
+      makeClient({
+        refresh: vi.fn().mockResolvedValue(true),
+        organizationMembers,
+      }),
+    );
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+      'Members are unavailable',
+    );
+    await click(
+      Array.from(document.querySelectorAll('button')).find((button) =>
+        button.textContent.includes('Try again'),
+      ),
+    );
+    expect(organizationMembers).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(document.body.textContent).toContain('Grace Hopper');
+    expect(client.organizationMembers).toHaveBeenCalled();
+  });
+
   it('validates login fields, shows API errors, and submits normalized credentials', async () => {
     const client = await mount('/login');
 

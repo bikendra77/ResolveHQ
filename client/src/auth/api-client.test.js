@@ -94,6 +94,100 @@ describe('authentication API client', () => {
     expect(JSON.parse(createOptions.body)).toEqual({ name: 'Ada Team' });
   });
 
+  it('uses the organization member and invitation endpoints', async () => {
+    apiClient.setAccessToken('short-lived-access-token');
+    const members = [
+      { id: '665f00000000000000000001', name: user.name, role: 'owner' },
+    ];
+    const invitations = [
+      {
+        id: '665f00000000000000000020',
+        email: 'grace@example.com',
+        role: 'member',
+        status: 'pending',
+      },
+    ];
+    fetchMock
+      .mockResolvedValueOnce(response(200, { data: { members } }))
+      .mockResolvedValueOnce({ status: 204, ok: true })
+      .mockResolvedValueOnce({ status: 204, ok: true })
+      .mockResolvedValueOnce(response(200, { data: { invitations } }))
+      .mockResolvedValueOnce(
+        response(201, {
+          data: {
+            invitation: invitations[0],
+            acceptUrl: 'https://resolvehq.example/invite/secure-token',
+          },
+        }),
+      )
+      .mockResolvedValueOnce({ status: 204, ok: true });
+
+    await expect(
+      apiClient.organizationMembers('665f00000000000000000010'),
+    ).resolves.toEqual(members);
+    await expect(
+      apiClient.changeOrganizationMemberRole(
+        '665f00000000000000000010',
+        '665f00000000000000000001',
+        'admin',
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      apiClient.removeOrganizationMember(
+        '665f00000000000000000010',
+        '665f00000000000000000001',
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      apiClient.organizationInvitations('665f00000000000000000010'),
+    ).resolves.toEqual(invitations);
+    await expect(
+      apiClient.createOrganizationInvitation('665f00000000000000000010', {
+        email: 'grace@example.com',
+        role: 'member',
+      }),
+    ).resolves.toMatchObject({
+      invitation: invitations[0],
+      acceptUrl: 'https://resolvehq.example/invite/secure-token',
+    });
+    await expect(
+      apiClient.revokeOrganizationInvitation(
+        '665f00000000000000000010',
+        '665f00000000000000000020',
+      ),
+    ).resolves.toBeNull();
+
+    expect(
+      fetchMock.mock.calls.map(([url, options]) => [
+        url,
+        options.method || 'GET',
+      ]),
+    ).toEqual([
+      ['/api/v1/organizations/665f00000000000000000010/members', 'GET'],
+      [
+        '/api/v1/organizations/665f00000000000000000010/members/665f00000000000000000001',
+        'PATCH',
+      ],
+      [
+        '/api/v1/organizations/665f00000000000000000010/members/665f00000000000000000001',
+        'DELETE',
+      ],
+      ['/api/v1/organizations/665f00000000000000000010/invitations', 'GET'],
+      ['/api/v1/organizations/665f00000000000000000010/invitations', 'POST'],
+      [
+        '/api/v1/organizations/665f00000000000000000010/invitations/665f00000000000000000020',
+        'DELETE',
+      ],
+    ]);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      role: 'admin',
+    });
+    expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toEqual({
+      email: 'grace@example.com',
+      role: 'member',
+    });
+  });
+
   it('loads the current user with the in-memory access token and includes cookies', async () => {
     apiClient.setAccessToken('short-lived-access-token');
     fetchMock.mockResolvedValueOnce(response(200, { data: { user } }));

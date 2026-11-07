@@ -72,7 +72,13 @@ function AppRoutes() {
       return;
     }
 
-    const destination = organizations.length > 0 ? '/app' : '/onboarding';
+    const isAppRoute = pathname === '/app' || pathname === '/app/members';
+    const destination =
+      organizations.length > 0
+        ? isAppRoute
+          ? pathname
+          : '/app'
+        : '/onboarding';
     if (pathname !== destination) {
       navigate(destination, { replace: true });
     }
@@ -108,7 +114,7 @@ function AppRoutes() {
   }
 
   if (
-    pathname === '/app' &&
+    (pathname === '/app' || pathname === '/app/members') &&
     status === 'authenticated' &&
     user &&
     organizationsStatus === 'ready' &&
